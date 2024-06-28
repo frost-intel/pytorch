@@ -45,7 +45,7 @@ class CppTemplateKernel(CppKernel):
         return PartialRender(
             template.render(kernel=self, **kwargs), self.render_hooks
         ).finalize_all()
-    
+
     def set_args(
         self,
         inputs: Dict[str, ir.Buffer],
@@ -70,7 +70,6 @@ class CppTemplateKernel(CppKernel):
                         orig_name
                     ]
         return ""
-
 
     def def_kernel(
         self,
@@ -135,7 +134,7 @@ class CppTemplateKernel(CppKernel):
         if dim < 0 or dim >= len(sizes):
             return default_value
         if unwrapped:
-            return self.rename_indexing(sizes[dim])
+            return str(self.rename_indexing(sizes[dim]))
         return cexpr_index(self.rename_indexing(sizes[dim]))
 
     def stride(self, node: ir.Buffer, dim: int) -> str:
