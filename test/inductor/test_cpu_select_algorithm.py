@@ -255,9 +255,9 @@ class TestSelectAlgorithm(TestCase):
     @unittest.skipIf(not TEST_MKL, "Test requires MKL")
     @dtypes(torch.float, torch.bfloat16, torch.half)
     def test_bmm_with_pointwise(self, dtype):
-        bs = 30
+        bs = 79
         Md = 384
-        Kd = 10
+        Kd = 16
         Nd = 96
         class M(torch.nn.Module):
             def __init__(self):
@@ -445,9 +445,9 @@ class TestSelectAlgorithmDynamicShapes(_DynamicShapesTestBase):
     @unittest.skipIf(not TEST_MKL, "Test requires MKL")
     @dtypes(torch.float, torch.bfloat16, torch.half)
     def test_bmm_with_pointwise_dynamic_shapes(self, dtype):
-        bs = 30
+        bs = 79
         Md = 384
-        Kd = 196
+        Kd = 16
         Nd = 96
         class M(torch.nn.Module):
             def __init__(self):
