@@ -193,6 +193,33 @@ class TestSelectAlgorithm(BaseTestSelectAlgorithm):
     @patches
     @torch.no_grad
     @unittest.skipIf(not TEST_MKL, "Test requires MKL")
+    @parametrize("Mdim", (384,))
+    @parametrize("Kdim", (196,))
+    @parametrize("Ndim", (384, 385))
+    @dtypes(torch.float, torch.bfloat16, torch.half)
+    def test_bmm(self, dtype, Mdim, Kdim, Ndim):
+        bs = 29
+
+        class M(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+
+            def forward(self, x, y):
+                return x @ y
+
+        counters.clear()
+        u = torch.randn(bs, Mdim, Kdim).to(dtype=dtype)
+        v = torch.randn(bs, Kdim, Ndim).to(dtype=dtype)
+        mod = M().to(dtype=dtype).eval()
+        with verify(dtype) as (atol, rtol):
+            self.common(mod, (u,v), atol=atol, rtol=rtol)
+        # TODO(jgong5): support transposed input
+        self.assertEqual(counters["inductor"]["select_algorithm_autotune"], 1)
+
+    @inductor_config.patch({"freezing": True})
+    @patches
+    @torch.no_grad
+    @unittest.skipIf(not TEST_MKL, "Test requires MKL")
     @parametrize("batch_size", (384,))
     @parametrize("in_features", (196,))
     @parametrize("out_features", (384, 385))
@@ -229,7 +256,7 @@ class TestSelectAlgorithm(BaseTestSelectAlgorithm):
                 return self.epilogue(self.linear(x))
 
         counters.clear()
-        v = torch.randn(batch_size, in_features).to(dtype=dtype)
+        v = torch.randn(batch_size, in_features).to(dtype=dtype) + 2
         u = torch.randn(batch_size, out_features).to(dtype=dtype)
         mod = M(bias=bias, epilogue=epilogue, other=u).to(dtype=dtype).eval()
         with verify(dtype) as (atol, rtol):
@@ -262,11 +289,11 @@ class TestSelectAlgorithm(BaseTestSelectAlgorithm):
     @patches
     @torch.no_grad
     @unittest.skipIf(not TEST_MKL, "Test requires MKL")
-    @dtypes(torch.float, torch.bfloat16, torch.half)
+    @dtypes(torch.float32, torch.bfloat16, torch.half)
     def test_bmm_with_pointwise(self, dtype):
-        bs = 79
+        bs = 29
         Md = 384
-        Kd = 16
+        Kd = 196
         Nd = 96
         class M(torch.nn.Module):
             def __init__(self):
@@ -280,7 +307,8 @@ class TestSelectAlgorithm(BaseTestSelectAlgorithm):
         u = torch.randn(bs, Md, Kd).to(dtype=dtype)
         v = torch.randn(bs, Kd, Nd).to(dtype=dtype)
         mod = M().to(dtype=dtype).eval()
-        self.common(mod, (u,v))
+        with verify(dtype) as (atol, rtol):
+            self.common(mod, (u,v), atol=atol, rtol=rtol)
         self.assertEqual(counters["inductor"]["select_algorithm_autotune"], 1)
         self.assertEqual(counters["inductor"]["cpp_epilogue_fusion_counter"], 1)
 
@@ -650,7 +678,7 @@ class TestSelectAlgorithmDynamicShapes(_DynamicShapesTestBase):
     def test_bmm_with_pointwise_dynamic_shapes(self, dtype):
         bs = 79
         Md = 384
-        Kd = 16
+        Kd = 196
         Nd = 96
         class M(torch.nn.Module):
             def __init__(self):
