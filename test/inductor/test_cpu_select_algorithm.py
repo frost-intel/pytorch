@@ -212,7 +212,7 @@ class TestSelectAlgorithm(BaseTestSelectAlgorithm):
         v = torch.randn(bs, Kdim, Ndim).to(dtype=dtype)
         mod = M().to(dtype=dtype).eval()
         with verify(dtype) as (atol, rtol):
-            self.common(mod, (u,v), atol=atol, rtol=rtol)
+            self.common(mod, (u, v), atol=atol, rtol=rtol)
         # TODO(jgong5): support transposed input
         self.assertEqual(counters["inductor"]["select_algorithm_autotune"], 1)
 
@@ -236,10 +236,11 @@ class TestSelectAlgorithm(BaseTestSelectAlgorithm):
             "hardsigmoid",
             "leaky_relu",
             "hardtanh",
-            "add",
-            "sub",
-            "mul",
-            "div",
+            # TODO(frost-intel): Support binary epilogue fusion.
+            # "add",
+            # "sub",
+            # "mul",
+            # "div",
         ),
     )
     @dtypes(torch.float, torch.bfloat16, torch.half)
@@ -256,7 +257,7 @@ class TestSelectAlgorithm(BaseTestSelectAlgorithm):
                 return self.epilogue(self.linear(x))
 
         counters.clear()
-        v = torch.randn(batch_size, in_features).to(dtype=dtype) + 2
+        v = torch.randn(batch_size, in_features).to(dtype=dtype)
         u = torch.randn(batch_size, out_features).to(dtype=dtype)
         mod = M(bias=bias, epilogue=epilogue, other=u).to(dtype=dtype).eval()
         with verify(dtype) as (atol, rtol):
@@ -285,30 +286,49 @@ class TestSelectAlgorithm(BaseTestSelectAlgorithm):
         else:
             self.assertEqual(counters["inductor"]["cpp_epilogue_fusion_counter"], 1)
 
-
     @patches
     @torch.no_grad
     @unittest.skipIf(not TEST_MKL, "Test requires MKL")
+    @parametrize(
+        "epilogue",
+        (
+            "relu",
+            "gelu",
+            "silu",
+            "sigmoid",
+            "tanh",
+            "hardswish",
+            "hardsigmoid",
+            "leaky_relu",
+            "hardtanh",
+            "add",
+            "sub",
+            "mul",
+            "div",
+        ),
+    )
     @dtypes(torch.float32, torch.bfloat16, torch.half)
-    def test_bmm_with_pointwise(self, dtype):
+    def test_bmm_with_pointwise(self, epilogue, dtype):
         bs = 29
         Md = 384
         Kd = 196
         Nd = 96
-        class M(torch.nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.epilogue = torch.nn.ReLU()
 
-            def forward(self, x, other):
-                return self.epilogue((x @ other))
+        class M(torch.nn.Module):
+            def __init__(self, epilogue, other):
+                super().__init__()
+                self.epilogue = _get_epilogue(epilogue, other)
+
+            def forward(self, x, w):
+                return self.epilogue(x @ w)
 
         counters.clear()
-        u = torch.randn(bs, Md, Kd).to(dtype=dtype)
-        v = torch.randn(bs, Kd, Nd).to(dtype=dtype)
-        mod = M().to(dtype=dtype).eval()
+        x = torch.randn(bs, Md, Kd).to(dtype=dtype)
+        w = torch.randn(bs, Kd, Nd).to(dtype=dtype)
+        other = torch.randn(bs, Md, Nd).to(dtype=dtype)
+        mod = M(epilogue, other).to(dtype=dtype).eval()
         with verify(dtype) as (atol, rtol):
-            self.common(mod, (u,v), atol=atol, rtol=rtol)
+            self.common(mod, (x, w), atol=atol, rtol=rtol)
         self.assertEqual(counters["inductor"]["select_algorithm_autotune"], 1)
         self.assertEqual(counters["inductor"]["cpp_epilogue_fusion_counter"], 1)
 
@@ -680,13 +700,14 @@ class TestSelectAlgorithmDynamicShapes(_DynamicShapesTestBase):
         Md = 384
         Kd = 196
         Nd = 96
+
         class M(torch.nn.Module):
             def __init__(self):
                 super().__init__()
                 self.epilogue = torch.nn.ReLU()
 
             def forward(self, x, other):
-                return self.epilogue((x @ other))
+                return self.epilogue(x @ other)
 
         counters.clear()
         u = torch.randn(bs, Md, Kd).to(dtype=dtype)
@@ -696,7 +717,7 @@ class TestSelectAlgorithmDynamicShapes(_DynamicShapesTestBase):
         torch._dynamo.mark_static(u, 2)
         torch._dynamo.mark_static(v, 2)
         mod = M().to(dtype=dtype).eval()
-        self.common(mod, (u,v))
+        self.common(mod, (u, v))
         self.assertEqual(counters["inductor"]["select_algorithm_autotune"], 1)
         self.assertEqual(counters["inductor"]["cpp_epilogue_fusion_counter"], 1)
 
