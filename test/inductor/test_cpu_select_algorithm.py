@@ -236,11 +236,10 @@ class TestSelectAlgorithm(BaseTestSelectAlgorithm):
             "hardsigmoid",
             "leaky_relu",
             "hardtanh",
-            # TODO(frost-intel): Support binary epilogue fusion.
-            # "add",
-            # "sub",
-            # "mul",
-            # "div",
+            "add",
+            "sub",
+            "mul",
+            "div",
         ),
     )
     @dtypes(torch.float, torch.bfloat16, torch.half)
@@ -301,10 +300,11 @@ class TestSelectAlgorithm(BaseTestSelectAlgorithm):
             "hardsigmoid",
             "leaky_relu",
             "hardtanh",
-            "add",
-            "sub",
-            "mul",
-            "div",
+            # TODO(frost-intel): Support binary epilogue fusion.
+            # "add",
+            # "sub",
+            # "mul",
+            # "div",
         ),
     )
     @dtypes(torch.float32, torch.bfloat16, torch.half)

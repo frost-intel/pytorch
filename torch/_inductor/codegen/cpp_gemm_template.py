@@ -66,11 +66,11 @@ GEMM_TEMPLATE = r"""
     {%- else %}
     constexpr int64_t M = {{kernel.size(GemmOut, 0)}};
     constexpr int64_t M0_blocks = (M + M0 - 1) / M0;
-    constexpr int64_t Mt_blocks = {{template.thread_blocking().block_m}};
-    constexpr int64_t Nt_blocks = {{template.thread_blocking().block_n}};
-    constexpr int64_t Kt_blocks = {{template.thread_blocking().block_k}};
-    constexpr int64_t Mc_blocks = {{template.cache_blocking().block_m}};
-    constexpr int64_t Kc_blocks = {{template.cache_blocking().block_k}};
+    constexpr int64_t Mt_blocks = {{template.thread_blocking(num_threads).block_m}};
+    constexpr int64_t Nt_blocks = {{template.thread_blocking(num_threads).block_n}};
+    constexpr int64_t Kt_blocks = {{template.thread_blocking(num_threads).block_k}};
+    constexpr int64_t Mc_blocks = {{template.cache_blocking(num_threads).block_m}};
+    constexpr int64_t Kc_blocks = {{template.cache_blocking(num_threads).block_k}};
     {%- endif %}
 
     // TODO(jgong5): support k-slicing
@@ -191,8 +191,7 @@ class CppPackedGemmTemplate(CppTemplate):
         self.is_dynamic_M = has_free_symbols((m,))
         self.should_pack_weights = True
 
-    @cache_on_self
-    def thread_blocking(self) -> GemmBlocking:
+    def thread_blocking(self, num_threads=None, reset_cache=False) -> GemmBlocking:
         """
         NOTE [Thread blocking in Cpp GEMM]
         We use simple heuristics to decide the thread blocking:
@@ -203,6 +202,13 @@ class CppPackedGemmTemplate(CppTemplate):
         TODO(jgong5): allow tuning various blocking options
         """
 
+        if hasattr(self, "_thread_blocking_cache") and not reset_cache:
+            thread_count, cache = self._thread_blocking_cache
+            if thread_count == num_threads:
+                return cache
+        if num_threads is None:
+            num_threads = self.num_threads
+        # TODO(jgong5): allow tuning various blocking options
         def get_factors(number):
             factors = []
             for i in range(int(number**0.5), 0, -1):
@@ -224,7 +230,7 @@ class CppPackedGemmTemplate(CppTemplate):
         m_blocks = (self.m + register_blocking.block_m - 1) // register_blocking.block_m
         n_blocks = (self.n + register_blocking.block_n - 1) // register_blocking.block_n
         k_blocks = (self.k + register_blocking.block_k - 1) // register_blocking.block_k
-        factors = get_factors(self.num_threads)
+        factors = get_factors(num_threads)
         assert len(factors) > 0
 
         # we favor square-sized thread blocks for good data reuse
@@ -243,19 +249,19 @@ class CppPackedGemmTemplate(CppTemplate):
         best_blocking = None
         # check if we can have a thread-blocking to occupy all threads
         for factor in factors:
-            cofactor = self.num_threads // factor
+            cofactor = num_threads // factor
             if n_blocks >= factor and m_blocks >= cofactor:
                 blocking = get_blocking(
-                    self.num_threads, factor, m_blocks, n_blocks, k_blocks
+                    num_threads, factor, m_blocks, n_blocks, k_blocks
                 )
                 best_blocking = get_better_blocking(blocking, best_blocking)
 
         if best_blocking is None:
             for factor in factors:
-                cofactor = self.num_threads // factor
+                cofactor = num_threads // factor
                 if n_blocks >= factor or m_blocks >= cofactor:
                     blocking = get_blocking(
-                        self.num_threads, factor, m_blocks, n_blocks, k_blocks
+                        num_threads, factor, m_blocks, n_blocks, k_blocks
                     )
                     best_blocking = get_better_blocking(blocking, best_blocking)
 
@@ -585,14 +591,10 @@ class CppPackedGemmTemplate(CppTemplate):
         template.maybe_append_choice(choices)
         return template
 
-<<<<<<< HEAD
-    def get_options(
-=======
     def _get_default_reindexers(self, epilogue_nodes):
         return [None] * len(epilogue_nodes)
 
-    def get_options(  # type: ignore[override]
->>>>>>> Fix epilogue nodes
+    def get_options(
         self,
         kernel: CppTemplateKernel,
         template_buffer_node: Optional[ir.CppTemplateBuffer] = None,
