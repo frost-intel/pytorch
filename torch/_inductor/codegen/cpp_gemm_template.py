@@ -2,7 +2,7 @@
 import contextlib
 import logging
 import math
-from typing import Any, Callable, cast, List, Optional, Set, Union
+from typing import Any, Callable, cast, Dict, List, Optional, Set, Union
 from functools import lru_cache
 from unittest.mock import patch
 
@@ -603,7 +603,7 @@ class CppPackedGemmTemplate(CppTemplate):
         template_buffer_node: Optional[ir.CppTemplateBuffer] = None,
         epilogue_nodes: Optional[List[ir.IRNode]] = None,
         **kwargs,
-    ) -> dict[str, Any]:
+    ) -> Dict[str, Any]:
         assert len(self.input_nodes) >= 2
 
         int8_gemm = self.input_nodes[0].get_dtype() == torch.uint8
