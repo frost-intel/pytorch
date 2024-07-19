@@ -2,8 +2,8 @@
 import contextlib
 import logging
 import math
-from typing import Any, Callable, cast, Dict, List, Optional, Set, Union
 from functools import lru_cache
+from typing import Any, Callable, cast, Dict, List, Optional, Set, Union
 from unittest.mock import patch
 
 import torch
@@ -13,7 +13,7 @@ from ..._dynamo.utils import counters
 from .. import ir, lowering as L
 from ..kernel.mm_common import mm_args
 from ..select_algorithm import DataProcessorTemplateWrapper
-from ..utils import cache_on_self, has_free_symbols, parallel_num_threads
+from ..utils import has_free_symbols, parallel_num_threads
 from ..virtualized import ops, V
 from .cpp_micro_gemm import CppMicroGemmAMX, create_micro_gemm, LayoutType
 from .cpp_template import CppTemplate
@@ -190,6 +190,7 @@ class CppPackedGemmTemplate(CppTemplate):
         self.is_dynamic_M = has_free_symbols((m,))
         self.should_pack_weights = True
         self.thread_blocking = self.make_thread_blocking_cache()
+        self.cache_blocking = self.make_cache_blocking_cache()
 
     def make_thread_blocking_cache(self):
         cache = lru_cache()(self._thread_blocking)
@@ -270,8 +271,15 @@ class CppPackedGemmTemplate(CppTemplate):
         assert best_blocking is not None
         return best_blocking
 
-    @cache_on_self
-    def cache_blocking(self) -> GemmBlocking:
+    def make_cache_blocking_cache(self):
+        cache = lru_cache()(self._cache_blocking)
+
+        def cache_blocking(num_threads: int) -> GemmBlocking:
+            return cache(num_threads)
+
+        return cache_blocking
+
+    def _cache_blocking(self, num_threads: int) -> GemmBlocking:
         def get_cache_blocking(register_blocking, thread_blocking):
             M0 = register_blocking.block_m
             N0 = register_blocking.block_n
@@ -326,7 +334,7 @@ class CppPackedGemmTemplate(CppTemplate):
             not self.is_dynamic_M
         ), "Unable to determine cache blocking for dynamic M."
         register_blocking = self.register_blocking
-        thread_blocking = self.thread_blocking()
+        thread_blocking = self.thread_blocking(num_threads)
 
         return GemmBlocking(*get_cache_blocking(register_blocking, thread_blocking))
 
@@ -335,8 +343,8 @@ class CppPackedGemmTemplate(CppTemplate):
         if self.is_dynamic_M:
             # thread and cache blockings are determined at runtime for dynamic shapes
             return
-        log.debug(f"Cache blocking: {self.cache_blocking()}")  # noqa: G004
-        thread_blocking = self.thread_blocking()
+        log.debug(f"Cache blocking: {self.cache_blocking(self.num_threads)}")  # noqa: G004
+        thread_blocking = self.thread_blocking(self.num_threads)
         log.debug(f"Thread blocking: {thread_blocking}")  # noqa: G004
 
         def get_occupancy():
