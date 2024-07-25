@@ -312,6 +312,10 @@ class TestSelectAlgorithm(BaseTestSelectAlgorithm):
     @patches
     @torch.no_grad
     @unittest.skipIf(not TEST_MKL, "Test requires MKL")
+    @parametrize("Mdim", (384,))
+    @parametrize("Kdim", (196,))
+    @parametrize("Ndim", (384, 385))
+    @parametrize("bias", (True, False))
     @parametrize(
         "epilogue",
         (
@@ -327,11 +331,10 @@ class TestSelectAlgorithm(BaseTestSelectAlgorithm):
         ),
     )
     @dtypes(torch.float32, torch.bfloat16, torch.half)
-    def test_bmm_with_pointwise(self, epilogue, dtype):
+    def test_bmm_with_pointwise(
+        self, Mdim, Kdim, Ndim, epilogue, dtype
+    ):
         bs = 29
-        Md = 384
-        Kd = 196
-        Nd = 96
 
         class M(torch.nn.Module):
             def __init__(self, epilogue, other):
@@ -342,9 +345,9 @@ class TestSelectAlgorithm(BaseTestSelectAlgorithm):
                 return self.epilogue(x @ w)
 
         counters.clear()
-        x = torch.randn(bs, Md, Kd).to(dtype=dtype)
-        w = torch.randn(bs, Kd, Nd).to(dtype=dtype)
-        other = torch.randn(bs, Md, Nd).to(dtype=dtype)
+        x = torch.randn(bs, Mdim, Kdim).to(dtype=dtype)
+        w = torch.randn(bs, Kdim, Ndim).to(dtype=dtype)
+        other = torch.randn(bs, Mdim, Ndim).to(dtype=dtype)
         mod = M(epilogue, other).to(dtype=dtype).eval()
         with verify(dtype) as (atol, rtol):
             self.common(mod, (x, w), atol=atol, rtol=rtol)

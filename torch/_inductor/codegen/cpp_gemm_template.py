@@ -456,16 +456,39 @@ class CppPackedGemmTemplate(CppTemplate):
 
         def pack_weight(inputs, layout_or_out):
             if not should_pack_weights and micro_gemm.get_b_layout() == LayoutType.NORMAL:
+                if padded_n != n:
+                    W = inputs[1]
+                    if isinstance(W, ir.IRNode):
+                        padded_w = L.constant_pad_nd(W, (0, padded_n - n))
+                        blocked_w = ir.ExternKernel.realize_input(blocked_w)
+                        blocked_w = ir.ExternKernel.require_contiguous(blocked_w)
+                        if isinstance(blocked_w, ir.ReinterpretView):
+                            # normalize stride to be "contiguous_strides" per size
+                            # this avoids the problems in L.view during template codegen
+                            assert isinstance(blocked_w.layout, ir.FixedLayout)
+                            blocked_w.layout = ir.FixedLayout(
+                                blocked_w.layout.device,
+                                blocked_w.layout.dtype,
+                                blocked_w.layout.size,
+                                ir.FlexibleLayout.contiguous_strides(blocked_w.layout.size),
+                                blocked_w.layout.offset,
+                            )
+                    else:
+                        padded_w = torch.nn.functional.pad(W, (0, padded_n - n))
+                    inputs[1] = padded_w
                 return inputs, layout_or_out
             W = inputs[1]
             new_inputs = list(inputs)
             blocked_w: Union[ir.IRNode, torch.Tensor] = W
             if isinstance(W, ir.IRNode):
                 new_size = [padded_n // block_n, k, block_n]
+                b = W.get_size()[0]
                 if is_bmm:
-                    new_size = [-1] + new_size
+                    if not isinstance(W, ir.TensorBox):
+                        W = ir.TensorBox(W)
+                    blocked_w = L.constant_pad_nd(W, (0, padded_n - n))
                     blocked_w = L.permute(
-                        L.view(L.constant_pad_nd(W,(0, padded_n - n)), [-1] + new_size),
+                        L.view(blocked_w, (b, k, padded_n // block_n, block_n)),
                         [0, 2, 1, 3],
                     )
                     if micro_gemm.get_b_layout() != LayoutType.NORMAL:
@@ -474,10 +497,23 @@ class CppPackedGemmTemplate(CppTemplate):
                         )
                         blocked_w = L.view(
                             L.permute(
-                                L.view(blocked_w, (-1, padded_n // block_n, k // vnni_size, vnni_size, block_n)),
+                                L.view(blocked_w, (b, padded_n // block_n, k // vnni_size, vnni_size, block_n)),
                                 [0, 1, 2, 4, 3]
                             ),
-                            (-1, n // block_n, k, block_n)
+                            [b] + new_size,
+                        )
+                    blocked_w = ir.ExternKernel.realize_input(blocked_w)
+                    blocked_w = ir.ExternKernel.require_contiguous(blocked_w)
+                    if isinstance(blocked_w, ir.ReinterpretView):
+                        # normalize stride to be "contiguous_strides" per size
+                        # this avoids the problems in L.view during template codegen
+                        assert isinstance(blocked_w.layout, ir.FixedLayout)
+                        blocked_w.layout = ir.FixedLayout(
+                            blocked_w.layout.device,
+                            blocked_w.layout.dtype,
+                            blocked_w.layout.size,
+                            ir.FlexibleLayout.contiguous_strides(blocked_w.layout.size),
+                            blocked_w.layout.offset,
                         )
                 else:
                     blocked_w = ir.Buffer(
@@ -491,12 +527,20 @@ class CppPackedGemmTemplate(CppTemplate):
                         ),
                     )
             else:
-                blocked_w = (
-                    torch.nn.functional.pad(W, (0, padded_n - n))
-                    .reshape(k, padded_n // block_n, block_n)
-                    .transpose(0, 1)
-                    .contiguous()
-                )
+                if is_bmm:
+                    blocked_w = (
+                        torch.nn.functional.pad(W, (0, padded_n - n))
+                        .reshape(-1, k, padded_n // block_n, block_n)
+                        .transpose(1, 2)
+                        .contiguous()
+                    )
+                else:
+                    blocked_w = (
+                        torch.nn.functional.pad(W, (0, padded_n - n))
+                        .reshape(k, padded_n // block_n, block_n)
+                        .transpose(0, 1)
+                        .contiguous()
+                    )
                 if micro_gemm.get_b_layout() != LayoutType.NORMAL:
                     layout_str = (
                         "VNNI4"
