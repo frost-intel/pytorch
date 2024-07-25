@@ -164,6 +164,7 @@ class CppPackedGemmTemplate(CppTemplate):
         beta=1,
         alpha=1,
         has_bias=False,
+        should_pack_weights=True,
         epilogue_creator: Optional[Callable[[ir.Buffer], ir.Pointwise]] = None,
         name="packed_gemm",
     ):
@@ -184,7 +185,7 @@ class CppPackedGemmTemplate(CppTemplate):
         self.m, self.n, self.k = m, n, k
         self.padded_n = get_padded_n(n, self.register_blocking.block_n)
         self.is_dynamic_M = has_free_symbols((m,))
-        self.should_pack_weights = True
+        self.should_pack_weights = should_pack_weights
         self.thread_blocking = self.make_thread_blocking_cache()
         self.cache_blocking = self.make_cache_blocking_cache()
 
@@ -431,6 +432,7 @@ class CppPackedGemmTemplate(CppTemplate):
             *maybe_to_dense(*reorder_and_filter(input_nodes, layout))
         )
         m, n, k, *_ = mm_args(new_inputs[0], new_inputs[1])
+        is_bmm = len(new_inputs[1].get_size()) == 3
         output_dtype, compute_dtype = get_gemm_template_output_and_compute_dtype(
             new_inputs[0].get_dtype()
         )
@@ -447,27 +449,47 @@ class CppPackedGemmTemplate(CppTemplate):
             num_threads=num_threads,
         )
         assert micro_gemm is not None
+        if micro_gemm.get_b_layout() != LayoutType.NORMAL:
+            should_pack_weights = True
         _, block_n, _ = micro_gemm.register_blocking
         padded_n = get_padded_n(n, block_n)
 
         def pack_weight(inputs, layout_or_out):
-            if not should_pack_weights:
+            if not should_pack_weights and micro_gemm.get_b_layout() == LayoutType.NORMAL:
                 return inputs, layout_or_out
             W = inputs[1]
             new_inputs = list(inputs)
             blocked_w: Union[ir.IRNode, torch.Tensor] = W
             if isinstance(W, ir.IRNode):
                 new_size = [padded_n // block_n, k, block_n]
-                blocked_w = ir.Buffer(
-                    W.get_name(),  # Borrow the registered buffer name
-                    ir.FixedLayout(
-                        W.get_device(),
-                        W.get_dtype(),
-                        new_size,
-                        ir.FlexibleLayout.contiguous_strides(new_size),
-                        0,
-                    ),
-                )
+                if is_bmm:
+                    new_size = [-1] + new_size
+                    blocked_w = L.permute(
+                        L.view(L.constant_pad_nd(W,(0, padded_n - n)), [-1] + new_size),
+                        [0, 2, 1, 3],
+                    )
+                    if micro_gemm.get_b_layout() != LayoutType.NORMAL:
+                        vnni_size = (
+                            4 if micro_gemm.get_b_layout() == LayoutType.VNNI4 else 2
+                        )
+                        blocked_w = L.view(
+                            L.permute(
+                                L.view(blocked_w, (-1, padded_n // block_n, k // vnni_size, vnni_size, block_n)),
+                                [0, 1, 2, 4, 3]
+                            ),
+                            (-1, n // block_n, k, block_n)
+                        )
+                else:
+                    blocked_w = ir.Buffer(
+                        W.get_name(),  # Borrow the registered buffer name
+                        ir.FixedLayout(
+                            W.get_device(),
+                            W.get_dtype(),
+                            new_size,
+                            ir.FlexibleLayout.contiguous_strides(new_size),
+                            0,
+                        ),
+                    )
             else:
                 blocked_w = (
                     torch.nn.functional.pad(W, (0, padded_n - n))
@@ -491,14 +513,24 @@ class CppPackedGemmTemplate(CppTemplate):
                     assert (
                         k % vnni_size == 0
                     ), f"k should be divisible by vnni_size for {layout_str} layout"
-                    blocked_w = (
-                        blocked_w.view(
-                            padded_n // block_n, k // vnni_size, vnni_size, block_n
+                    if is_bmm:
+                        blocked_w = (
+                            blocked_w.view(
+                                -1, padded_n // block_n, k // vnni_size, vnni_size, block_n
+                            )
+                            .transpose(-1, -2)
+                            .contiguous()
+                            .view(-1, padded_n // block_n, k, block_n)
                         )
-                        .transpose(-1, -2)
-                        .contiguous()
-                        .view(padded_n // block_n, k, block_n)
-                    )
+                    else:
+                        blocked_w = (
+                            blocked_w.view(
+                                padded_n // block_n, k // vnni_size, vnni_size, block_n
+                            )
+                            .transpose(-1, -2)
+                            .contiguous()
+                            .view(padded_n // block_n, k, block_n)
+                        )
                 # normalize stride to be "contiguous_strides" per size
                 # this avoids the problems in L.view during template codegen
                 new_stride = [1]
@@ -543,17 +575,25 @@ class CppPackedGemmTemplate(CppTemplate):
                 new_input_nodes, _ = reorder_and_filter(input_nodes, layout)
 
                 W_node = new_input_nodes[1]
-                assert W_node.get_name() in V.graph.constants
-                W = V.graph.constants[W_node.get_name()]
-                new_input_nodes[1] = W
-                new_input_nodes, _ = pack_weight(
-                    *normalize_shapes(*maybe_to_dense(new_input_nodes, layout))
-                )
-                W_packed = new_input_nodes[1]
-                W_packed_constant = V.graph.add_tensor_constant(W_packed)
-                template_buffer.inputs[1] = ir.InputsKernel.unwrap_storage_for_input(
-                    W_packed_constant
-                )
+                if W_node.get_name() in V.graph.constants:
+                    W = V.graph.constants[W_node.get_name()]
+                    new_input_nodes[1] = W
+                    new_input_nodes, _ = pack_weight(
+                        *normalize_shapes(*maybe_to_dense(new_input_nodes, layout))
+                    )
+                    W_packed = new_input_nodes[1]
+                    W_packed_constant = V.graph.add_tensor_constant(W_packed)
+                    template_buffer.inputs[1] = ir.InputsKernel.unwrap_storage_for_input(
+                        W_packed_constant
+                    )
+                else:
+                    new_input_nodes, _ = pack_weight(
+                        *normalize_shapes(*maybe_to_dense(new_input_nodes, layout))
+                    )
+                    W_packed = new_input_nodes[1]
+                    template_buffer.inputs[1] = ir.InputsKernel.unwrap_storage_for_input(
+                        W_packed
+                    )
             return output
 
         return dict(
@@ -566,6 +606,7 @@ class CppPackedGemmTemplate(CppTemplate):
             beta=beta,
             alpha=alpha,
             has_bias=has_bias,
+            should_pack_weights=should_pack_weights,
             epilogue_creator=epilogue_creator,
         )
 

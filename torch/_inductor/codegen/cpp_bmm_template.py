@@ -3,6 +3,7 @@ import contextlib
 from typing import Callable, List, Optional
 from unittest.mock import patch
 
+import torch
 from .. import ir
 from ..select_algorithm import DataProcessorTemplateWrapper
 from ..virtualized import V
@@ -49,7 +50,11 @@ extern "C"
     for (int64_t b_start = 0; b_start < B_single_thread_block; ++b_start) {
         single_thread_mm(
             &{{kernel.index(BX, ["b_start", 0, 0])}},
+            {%- if template.should_pack_weights %}
+            &{{kernel.index(BW, ["b_start", 0, 0, 0])}},
+            {%- else %}
             &{{kernel.index(BW, ["b_start", 0, 0])}},
+            {%- endif %}
             &{{kernel.index(BY, ["b_start", 0, 0])}}
             {%- if is_dynamic_M %},
             {{kernel.size(GemmOut, -2)}}
@@ -59,7 +64,11 @@ extern "C"
     for (int64_t b_start = B_single_thread_block; b_start < B; ++b_start) {
         threaded_mm(
             &{{kernel.index(BX, ["b_start", 0, 0])}},
+            {%- if template.should_pack_weights %}
+            &{{kernel.index(BW, ["b_start", 0, 0, 0])}},
+            {%- else %}
             &{{kernel.index(BW, ["b_start", 0, 0])}},
+            {%- endif %}
             &{{kernel.index(BY, ["b_start", 0, 0])}}
             {%- if is_dynamic_M %},
             {{kernel.size(GemmOut, -2)}}
@@ -80,6 +89,7 @@ class CppBmmTemplate(CppPackedGemmTemplate):
         beta=1,
         alpha=1,
         has_bias=False,
+        should_pack_weights=False,
         epilogue_creator: Optional[Callable[[ir.Buffer], ir.Pointwise]] = None,
         name="bmm",
     ):
@@ -94,7 +104,8 @@ class CppBmmTemplate(CppPackedGemmTemplate):
             epilogue_creator=epilogue_creator,
             name=name,
         )
-        self.should_pack_weights = False
+        # Value may be changed after micro_gemm is instantiated if using VNNI layout
+        self.should_pack_weights = should_pack_weights
 
     @staticmethod
     def add_choices(
