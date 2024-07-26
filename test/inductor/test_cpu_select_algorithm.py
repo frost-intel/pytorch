@@ -315,7 +315,6 @@ class TestSelectAlgorithm(BaseTestSelectAlgorithm):
     @parametrize("Mdim", (384,))
     @parametrize("Kdim", (196,))
     @parametrize("Ndim", (384, 385))
-    @parametrize("bias", (True, False))
     @parametrize(
         "epilogue",
         (
