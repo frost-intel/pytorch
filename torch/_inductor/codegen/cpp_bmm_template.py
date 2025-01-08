@@ -21,7 +21,7 @@ GEMM_SINGLE_THREAD_MM_STUB = r"""
     inputs={"X": X, "W": W},
     outputs={"Y": Y_2d},
     aliases=aliases,
-    function_name="single_thread_mm",
+    function_name=single_thread_gemm_name,
     extra_sizevars=BY_sizevars + [b_index],
     placeholder="<SINGLE_THREAD_MM_DEF_FOR_BMM>")}}"""
 
@@ -30,7 +30,7 @@ GEMM_THREADED_MM_STUB = r"""
     inputs={"X": X, "W": W},
     outputs={"Y": Y_2d},
     aliases=aliases,
-    function_name="threaded_mm",
+    function_name=threaded_mm_gemm_name,
     extra_sizevars=BY_sizevars + [b_index],
     placeholder="<THREADED_MM_DEF_FOR_BMM>")}}"""
 
@@ -54,7 +54,7 @@ extern "C"
     for (int64_t b_start = 0; b_start < B_single_thread_block; ++b_start) {
         {{template.get_gemm_function_call(
             kernel,
-            "single_thread_mm",
+            single_thread_gemm_name,
             "<SINGLE_THREAD_CALL_FOR_BMM>",
             b_index="b_start",
         )}}
@@ -62,7 +62,7 @@ extern "C"
     for (int64_t b_start = B_single_thread_block; b_start < B; ++b_start) {
         {{template.get_gemm_function_call(
             kernel,
-            "threaded_mm",
+            threaded_mm_gemm_name,
             "<THREADED_MM_CALL_FOR_BMM>",
             b_index="b_start",
         )}}
@@ -131,6 +131,27 @@ class CppBmmTemplate(CppGemmTemplate):
             else not W.is_contiguous()
         )
 
+    @staticmethod
+    def get_view_layout(node):
+        def is_slice(node: ir.IRNode):
+            if isinstance(node, ir.ReinterpretView):
+                old_layout = node.data.get_layout()
+                new_layout = node.layout
+                return (
+                    isinstance(node.data, ir.StorageBox)
+                    and old_layout.size[-len(new_layout.size) :] == new_layout.size
+                    and len(old_layout.size) > len(new_layout.size)
+                    and new_layout.is_contiguous()
+                )
+            return False
+
+        if is_slice(node):
+            # If weight is a slice of a larger tensor, we need to use the layout of the whole tensor
+            view_layout = node.data.get_layout()
+        else:
+            view_layout = node.layout
+        return view_layout.size, view_layout.stride, view_layout.offset
+
     def get_gemm_function_call(
         self,
         kernel: CppTemplateKernel,
@@ -195,6 +216,9 @@ class CppBmmTemplate(CppGemmTemplate):
             if isinstance(sym, sympy.Expr)
             for s in sym.free_symbols
         ]
+
+        options["single_thread_gemm_name"] = f"{kernel.kernel_name}_single_thread_mm"
+        options["threaded_mm_gemm_name"] = f"{kernel.kernel_name}_threaded_mm"
 
         return options
 
