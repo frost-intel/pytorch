@@ -41,6 +41,36 @@ def get_restrict_keyword() -> str:
     else:
         return "__restrict__"
 
+VNNI_PACKING = r"""
+    const auto packed_buf_size = K * {{n_dim}};
+    {%- if is_msvc_compiler %}
+    // MSVC doesn't support stack-allocated dynamic-sized arrays, so using heap memory here.
+    std::unique_ptr<{{input2_t}}[]> heap_packed_b_buf_ptr(new {{input2_t}}[packed_buf_size]);
+    {{input2_t}}* packed_B_buf = heap_packed_b_buf_ptr.get();
+    {%- else %}
+    alignas(4096) {{input2_t}} packed_B_buf[packed_buf_size];
+    {%- endif %}
+    auto pack_vnni_B = [&](int base_n_idx) {
+        for (int i = 0; i < K; i += {{vnni_size}}) {
+        {%- if vnni_size == 2 %}
+            {%- if block_n == 16 %}
+            at::vec::interleave2x16_256_bf16(
+            {%- elif block_n == 32 %}
+            at::vec::interleave2x16_512_bf16(
+            {%- elif block_n == 48 %}
+            at::vec::interleave2x48_256_bf16(
+            {%- endif %}
+                B + base_n_idx + i * ldb,
+                B + base_n_idx + (i + 1) * ldb,
+                packed_B_buf + i * {{n_dim}},
+                packed_B_buf + (i + 1) * {{n_dim}});
+        {%- elif vnni_size == 4 %}
+        // TODO: Support vnni_size == 4 to support non-constant GEMM inputs
+        // BMM never uses 8-bit inputs since no quantized kernels are supported
+        {%- endif %}
+        }
+    };
+"""
 
 class CppMicroGemm:
     """
@@ -114,6 +144,7 @@ inline void {{kernel_name}}(
             "vnni_size": 4 if self.input_dtype in [torch.uint8, torch.int8] else 2,
             "restrict_keyword": get_restrict_keyword(),
             "is_msvc_compiler": cpp_builder.is_msvc_cl(),
+            "vnni_pack_fn": self.codegen_vnni_packing,
         }
 
     def get_kernel_declaration(self):
@@ -122,6 +153,15 @@ inline void {{kernel_name}}(
 
     def get_kernel_extra_args_declare(self) -> str:
         return ""
+
+    def codegen_vnni_packing(self, N=None) -> str:
+        if N is None:
+            N = self.register_blocking.block_n
+        return KernelTemplate._template_from_string(VNNI_PACKING).render({
+            "n_dim": N,
+            "block_n": self.register_blocking.block_n,
+            **self.get_common_options(),
+        })
 
     def get_kernel_extra_args(self) -> str:
         return ""
@@ -545,38 +585,107 @@ class CppMicroGemmAMX(CppMicroGemm):
     """
 
     TEMPLATE_ENTRY = r"""
+// Transpose a [2, 32] matrix to [32, 2]
+// Note: the output leading dimension should be 2,
+// that is, the output must be contiguous
+static inline void {{kernel_name}}_transpose_pad_2x32_block(
+    const {{input2_t}}* src,
+    {{input2_t}}* dst,
+    int64_t ld_src,
+    int krem = 2,
+    int nrem = 32) {
+#if defined(CPU_CAPABILITY_AVX512)
+  __m512i r0, r1;
+  __m512i d0, d1;
+  // load
+  if (nrem < 32) {
+    __mmask32 mask_krem_v = (1LL << nrem) - 1;
+    r0 = _mm512_maskz_loadu_epi16(mask_krem_v, src);
+    // if krem is not 2, pad with zeros
+    if (krem == 2) {
+      r1 = _mm512_maskz_loadu_epi16(mask_krem_v, src + ld_src);
+    } else {
+      r1 = _mm512_setzero_si512();
+    }
+  } else {
+    r0 = _mm512_loadu_si512(reinterpret_cast<const __m512i*>(src));
+    if (krem == 2) {
+      r1 = _mm512_loadu_si512(reinterpret_cast<const __m512i*>(src + ld_src));
+    } else {
+      r1 = _mm512_setzero_si512();
+    }
+  }
+  // transpose
+  d0 = _mm512_unpacklo_epi16(r0, r1);
+  d1 = _mm512_unpackhi_epi16(r0, r1);
+  r0 = _mm512_shuffle_i32x4(d0, d1, 0x88);
+  r1 = _mm512_shuffle_i32x4(d0, d1, 0xdd);
+  d0 = _mm512_shuffle_i32x4(r0, r1, 0x88);
+  d1 = _mm512_shuffle_i32x4(r0, r1, 0xdd);
+
+  // store
+  if (nrem < 16) {
+    __mmask32 mask_rem_v = (1LL << (nrem * 2)) - 1;
+    _mm512_mask_storeu_epi16(dst, mask_rem_v, d0);
+  } else if (nrem == 16) {
+    _mm512_storeu_si512(reinterpret_cast<__m512i*>(dst), d0);
+  } else if (nrem < 32) {
+    __mmask32 mask_rem_v = (1LL << (nrem * 2 - 32)) - 1;
+    _mm512_storeu_si512(reinterpret_cast<__m512i*>(dst), d0);
+    _mm512_mask_storeu_epi16(
+        reinterpret_cast<__m512i*>(dst + 32), mask_rem_v, d1);
+  } else {
+    // normal store
+    _mm512_storeu_si512(reinterpret_cast<__m512i*>(dst), d0);
+    _mm512_storeu_si512(reinterpret_cast<__m512i*>(dst + 32), d1);
+  }
+#else
+TORCH_CHECK(false, "transpose_pad_2x32_block is only supported when avx512 is supported")
+#endif
+}
+
+// To use AMX to accelerate GEMM,
+// reorder the memory format [K, N] -> [K/2, N, 2]
+// Note: If K % 2 != 0, pad K implicitly
+static inline void {{kernel_name}}_pack_vnni2(
+    const {{input2_t}}* src,
+    {{input2_t}}* dst,
+    int64_t ld_src,
+    int64_t K,
+    int64_t N) {
+#if defined(CPU_CAPABILITY_AVX512)
+  int64_t bk = 0;
+  int64_t _K = K / 2 * 2;
+  int64_t _N = N / 32 * 32;
+  for (; bk < _K; bk += 2) {
+    int64_t bn = 0;
+    for (; bn < _N; bn += 32) {
+      {{kernel_name}}_transpose_pad_2x32_block(src + bk * ld_src + bn, dst + bk * N + bn * 2, ld_src);
+    }
+    int64_t nrem = N - bn;
+    if (nrem > 0) {
+      {{kernel_name}}_transpose_pad_2x32_block(src + bk * ld_src + bn, dst + bk * N + bn * 2, ld_src, 2, nrem);
+    }
+  }
+  if (K % 2 == 1) {
+    int64_t bn = 0;
+    for (; bn < _N; bn += 32) {
+      {{kernel_name}}_transpose_pad_2x32_block(src + bk * ld_src + bn, dst + bk * N + bn * 2, ld_src, 1);
+    }
+    int64_t nrem = N - bn;
+    if (nrem > 0) {
+      {{kernel_name}}_transpose_pad_2x32_block(src + bk * ld_src + bn, dst + bk * N + bn * 2, ld_src, 1, nrem);
+    }
+  }
+#else
+TORCH_CHECK(false, "pack_vnni2 is only supported when avx512 is supported")
+#endif
+}
 {{declare_kernel}} {
     {{kernel.assert_function}}(N % {{block_n}} == 0, "N dimension must be multiple of {{block_n}}");
     {{kernel.assert_function}}(K % 2 == 0, "K dimension must be multiple of 2");
 {%- if pack_vnni_B_locally %}
-    const auto packed_buf_size = K * {{block_n}};
-    {%- if is_msvc_compiler %}
-    // MSVC doesn't support stack-allocated dynamic-sized arrays, so using heap memory here.
-    std::unique_ptr<{{input2_t}}[]> heap_packed_b_buf_ptr(new {{input2_t}}[packed_buf_size]);
-    {{input2_t}}* packed_B_buf = heap_packed_b_buf_ptr.get();
-    {%- else %}
-    alignas(4096) {{input2_t}} packed_B_buf[packed_buf_size];
-    {%- endif %}
-    auto pack_vnni_B = [&](int base_n_idx) {
-        for (int i = 0; i < K; i += {{vnni_size}}) {
-        {%- if vnni_size == 2 %}
-            {%- if block_n == 16 %}
-            at::vec::interleave2x16_256_bf16(
-            {%- elif block_n == 32 %}
-            at::vec::interleave2x16_512_bf16(
-            {%- elif block_n == 48 %}
-            at::vec::interleave2x48_256_bf16(
-            {%- endif %}
-                B + base_n_idx + i * ldb,
-                B + base_n_idx + (i + 1) * ldb,
-                packed_B_buf + i * {{block_n}},
-                packed_B_buf + (i + 1) * {{block_n}});
-        {%- elif vnni_size == 4 %}
-        // TODO: Support vnni_size == 4 to support non-constant GEMM inputs
-        // BMM never uses 8-bit inputs since no quantized kernels are supported
-        {%- endif %}
-        }
-    };
+    {{ vnni_pack_fn() }}
 {%- endif %}
 {%- if use_cached_dequantized_B %}
     // Create a stack-allocated buffer for tiles of B.
@@ -632,6 +741,7 @@ class CppMicroGemmAMX(CppMicroGemm):
 {%- if pack_vnni_B_locally %}
         // Pack non-constant weights into VNNI interleaved format in packed_B_buf
         pack_vnni_B(n);
+        // {{kernel_name}}_pack_vnni2(B + n, packed_B_buf, ldb, K, {{block_n}});
 {%- elif use_cached_dequantized_B %}
         // Dequantize K * block_n int8 B elements into BF16
         load_dequantized_B(n);
@@ -881,30 +991,10 @@ class CppMicroBrgemm(CppMicroGemm):
     TEMPLATE_ENTRY = r"""
 #include <ATen/native/CPUBlas.h>
 {{declare_kernel}} {
+    {{ kernel.maybe_codegen_profile() }}
 {%- if pack_vnni_B_locally %}
-    const auto packed_buf_size = K * N;
-    {%- if is_msvc_compiler %}
-    // MSVC doesn't support stack-allocated dynamic-sized arrays, so using heap memory here.
-    std::unique_ptr<{{input2_t}}[]> heap_packed_b_buf_ptr(new {{input2_t}}[packed_buf_size]);
-    {{input2_t}}* packed_B_buf = heap_packed_b_buf_ptr.get();
-    {%- else %}
-    alignas(4096) {{input2_t}} packed_B_buf[packed_buf_size];
-    {%- endif %}
-    for (int i = 0; i < K; i += {{vnni_size}}) {
-    {%- if vnni_size == 2 %}
-        {%- if block_n == 16 %}
-        at::vec::interleave2x16_256_f16(
-        {%- elif block_n == 32 %}
-        at::vec::interleave2x16_512_f16(
-        {%- elif block_n == 48 %}
-        at::vec::interleave2x48_256_f16(
-        {%- endif %}
-            B + i * ldb,
-            B + (i + 1) * ldb,
-            packed_B_buf + i * N,
-            packed_B_buf + (i + 1) * N);
-    {%- endif %}
-    }
+    {{ vnni_pack_fn("N") }}
+    pack_vnni_B(0);
 {%- endif %}
     at::native::cpublas::brgemm(
       M, N, K,

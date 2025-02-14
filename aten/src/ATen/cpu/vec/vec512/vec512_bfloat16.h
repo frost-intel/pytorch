@@ -1647,17 +1647,14 @@ INTERLEAVE2X48_256_INIT(Half, f16)
 inline void interleave2x16_512_##name(const type* input0, const type* input1, type* output0, type* output1) { \
   __m512i row0 = _mm512_loadu_epi16(input0); \
   __m512i row1 = _mm512_loadu_epi16(input1); \
-  const __m512i idx1 = _mm512_set_epi16( 47, 15, 46, 14, 45, 13, 44, 12, 43, 11, 42, \
-      10, 41, 9, 40, 8, 39, 7, 38, 6, 37, 5, 36, 4, 35, 3, 34, 2, 33, 1, 32, 0 ); \
-  const __m512i idx2 = _mm512_set_epi16( \
-      47 + 16, 15 + 16, 46 + 16, 14 + 16, 45 + 16, 13 + 16, 44 + 16, 12 + 16, \
-      43 + 16, 11 + 16, 42 + 16, 10 + 16, 41 + 16, 9 + 16, 40 + 16, 8 + 16, \
-      39 + 16, 7 + 16, 38 + 16, 6 + 16, 37 + 16, 5 + 16, 36 + 16, 4 + 16, \
-      35 + 16, 3 + 16, 34 + 16, 2 + 16, 33 + 16, 1 + 16, 32 + 16, 0 + 16 ); \
-  __m512i res0 = _mm512_mask_permutex2var_epi16(row0, 0xFFFFFFFF, idx1, row1 ); \
-  __m512i res1 = _mm512_mask_permutex2var_epi16(row0, 0xFFFFFFFF, idx2, row1 ); \
-  _mm512_storeu_epi16(output0, res0); \
-  _mm512_storeu_epi16(output1, res1); \
+  __m512i d0 = _mm512_unpacklo_epi16(row0, row1); \
+  __m512i d1 = _mm512_unpackhi_epi16(row0, row1); \
+  row0 = _mm512_shuffle_i32x4(d0, d1, 0x88); \
+  row1 = _mm512_shuffle_i32x4(d0, d1, 0xdd); \
+  d0 = _mm512_shuffle_i32x4(row0, row1, 0x88); \
+  d1 = _mm512_shuffle_i32x4(row0, row1, 0xdd); \
+  _mm512_storeu_epi16(output0, d0); \
+  _mm512_storeu_epi16(output1, d1); \
 }
 INTERLEAVE2X16_512_INIT(BFloat16, bf16)
 INTERLEAVE2X16_512_INIT(Half, f16)

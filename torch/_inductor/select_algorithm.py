@@ -2059,6 +2059,8 @@ class AlgorithmSelectorCache(PersistentCache):
                         raise e from None
 
                 timings[choice] = timing
+                if isinstance(choice, ExternKernelCaller):
+                    timings[choice] *= 100
 
             return timings
 

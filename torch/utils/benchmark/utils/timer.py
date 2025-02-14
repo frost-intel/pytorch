@@ -280,6 +280,7 @@ class Timer:
             )
 
     def repeat(self, repeat: int = -1, number: int = -1) -> None:
+        return self._timer.repeat(repeat, number)
         raise NotImplementedError("See `Timer.blocked_autorange.`")
 
     def autorange(self, callback: Optional[Callable[[int, float], NoReturn]] = None) -> None:
