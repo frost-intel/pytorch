@@ -17,57 +17,42 @@ from .cpp_utils import DTYPE_TO_CPP, GemmBlocking
 
 
 # We pass all sizevars present in BY to the GEMM templates so variables are not renamed in the BMM definition
-GEMM_SINGLE_THREAD_MM_STUB = r"""
+GEMM_N_THREAD_MM_STUB = r"""
 {{kernel.def_kernel(
     inputs={"X": X, "W": W},
     outputs={"Y": Y_2d},
     aliases=aliases,
-    function_name=kernel_name+"_single_thread_mm",
+    function_name=fn_name,
     extra_sizevars=BY_sizevars + [b_index],
-    placeholder="<SINGLE_THREAD_MM_DEF_FOR_BMM>")}}"""
-
-GEMM_THREADED_MM_STUB = r"""
-{{kernel.def_kernel(
-    inputs={"X": X, "W": W},
-    outputs={"Y": Y_2d},
-    aliases=aliases,
-    function_name=kernel_name+"_threaded_mm",
-    extra_sizevars=BY_sizevars + [b_index],
-    placeholder="<THREADED_MM_DEF_FOR_BMM>")}}"""
+    placeholder="<N{}_THREAD_MM_DEF_FOR_BMM>".format(num_threads))}}"""
 
 BMM_TEMPLATE = r"""
 {{ template.codegen_microkernel_def() }}
-{{ template.codegen_single_thread_gemm() }}
-{{ template.codegen_multi_thread_gemm() }}
+{{ template.codegen_threaded_gemms() }}
 
 extern "C"
 {{kernel.def_kernel(inputs={"X": BX, "W": BW}, outputs={"Y": BY}, aliases=aliases)}}
 {
     const int64_t B = {{kernel.size(BY_2d, 0)}};
-    {%- if num_threads > 1 %}
-    constexpr int64_t num_threads = {{num_threads}};
-    int64_t B_single_thread_block = (B / num_threads) * num_threads;
-
-    #pragma omp parallel for num_threads({{num_threads}})
-    {%- else %}
-    int64_t B_single_thread_block = B;
+    int64_t b_ind = 0;
+    int64_t B_thread_block;
+    int64_t num_threads = {{num_threads}};
+    {% for num_gemm_threads, fn_name in template.bmm_threading_stages.items() %}
+    B_thread_block = ((B - b_ind)*1.05 / {{num_threads // num_gemm_threads}}) * {{num_threads // num_gemm_threads}} + b_ind;
+    {%- if num_gemm_threads != num_threads %}
+    #pragma omp parallel for num_threads({{num_threads // num_gemm_threads}})
     {%- endif %}
-    for (int64_t b_start = 0; b_start < B_single_thread_block; ++b_start) {
+    for (int b_start = b_ind; b_start < B_thread_block; ++b_start) {
         {{template.get_gemm_function_call(
-            kernel,
-            kernel_name+"_single_thread_mm",
-            "<SINGLE_THREAD_CALL_FOR_BMM>",
+            kernel=kernel,
+            function_name=fn_name,
+            placeholder="<N{}_THREAD_CALL_FOR_BMM>".format(num_gemm_threads),
             b_index="b_start",
         )}}
     }
-    for (int64_t b_start = B_single_thread_block; b_start < B; ++b_start) {
-        {{template.get_gemm_function_call(
-            kernel,
-            kernel_name+"_threaded_mm",
-            "<THREADED_MM_CALL_FOR_BMM>",
-            b_index="b_start",
-        )}}
-    }
+    std::cout << "B_thread_block: " << B_thread_block << " n " << {{num_threads // num_gemm_threads}} << std::endl;
+    b_ind = B_thread_block;
+    {% endfor %}
 }
 """
 
@@ -136,6 +121,7 @@ class CppBmmTemplate(CppGemmTemplate):
                 and micro_gemm.get_b_layout != LayoutType.NORMAL
             )
         )
+        print("Reshape W: ", result)
         return result
 
     def get_gemm_function_call(
@@ -242,21 +228,27 @@ class CppBmmTemplate(CppGemmTemplate):
             del kernel.args.sizevars[options["b_index"]]
             return result
 
-    def codegen_single_thread_gemm(self):
-        stub = self._template_from_string(GEMM_SINGLE_THREAD_MM_STUB).render(
-            self.render_options
-        )
-        return stub + self._template_from_string(GEMM_TEMPLATE).render(
-            {**self.render_options, "num_threads": 1}
-        )
+    def codegen_num_thread_gemm(self, num_gemm_threads: int, fn_name: str):
+        options = {
+            **self.render_options,
+            "fn_name": fn_name,
+            "num_threads": num_gemm_threads,
+        }
+        stub = self._template_from_string(GEMM_N_THREAD_MM_STUB).render(options)
+        return stub + self._template_from_string(GEMM_TEMPLATE).render(options)
 
-    def codegen_multi_thread_gemm(self):
-        stub = self._template_from_string(GEMM_THREADED_MM_STUB).render(
-            self.render_options
-        )
-        return stub + self._template_from_string(GEMM_TEMPLATE).render(
-            self.render_options
-        )
+    def codegen_threaded_gemms(self):
+        result = ""
+        possible_threads = [1, 2, 3, 4, 6, 8, 12, 16, 32, 64, self.num_threads]
+        bmm_threading_stages = [threads for threads in possible_threads if threads <= self.num_threads]
+        #bmm_threading_stages = [1, 2, self.num_threads]
+        self.bmm_threading_stages = {
+            threads: f"{self.render_options['kernel_name']}_{threads}_thread_mm"
+            for threads in bmm_threading_stages
+        }
+        for num_gemm_threads, fn_name in self.bmm_threading_stages.items():
+            result += self.codegen_num_thread_gemm(num_gemm_threads, fn_name)
+        return result
 
     def codegen_gemm_stub_def(self):
         return ""
