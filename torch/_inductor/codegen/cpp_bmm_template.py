@@ -38,7 +38,7 @@ extern "C"
     int64_t B_thread_block;
     int64_t num_threads = {{num_threads}};
     {% for num_gemm_threads, fn_name in template.bmm_threading_stages.items() %}
-    B_thread_block = ((B - b_ind)*1.05 / {{num_threads // num_gemm_threads}}) * {{num_threads // num_gemm_threads}} + b_ind;
+    B_thread_block = ((B - b_ind) / {{num_threads // num_gemm_threads}}) * {{num_threads // num_gemm_threads}} + b_ind;
     {%- if num_gemm_threads != num_threads %}
     #pragma omp parallel for num_threads({{num_threads // num_gemm_threads}})
     {%- endif %}
@@ -50,7 +50,6 @@ extern "C"
             b_index="b_start",
         )}}
     }
-    std::cout << "B_thread_block: " << B_thread_block << " n " << {{num_threads // num_gemm_threads}} << std::endl;
     b_ind = B_thread_block;
     {% endfor %}
 }
