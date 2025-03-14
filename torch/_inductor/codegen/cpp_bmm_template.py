@@ -8,6 +8,7 @@ import sympy
 
 from .. import ir
 from ..select_algorithm import PartialRender
+from ..utils import has_free_symbols
 from ..virtualized import V
 from .common import ArgName
 from .cpp_gemm_template import CppGemmTemplate, GEMM_TEMPLATE
@@ -34,19 +35,18 @@ extern "C"
 {{kernel.def_kernel(inputs={"X": BX, "W": BW}, outputs={"Y": BY}, aliases=aliases)}}
 {
     const int64_t B = {{kernel.size(BY_2d, 0)}};
-    {% for num_gemm_threads, fn_name in template.bmm_threading_stages.items() %}
+    {%- set num_gemm_threads = 1 if is_dynamic_B or (BY_2dBY_2d.get_size()[0] < 4) else num_threads %}
     {%- if num_gemm_threads != num_threads %}
     #pragma omp parallel for num_threads({{num_threads // num_gemm_threads}})
     {%- endif %}
     for (int b_start = 0; b_start < B; ++b_start) {
         {{template.get_gemm_function_call(
             kernel=kernel,
-            function_name=fn_name,
+            function_name=template.bmm_threading_fns[num_gemm_threads],
             placeholder="<N{}_THREAD_CALL_FOR_BMM>".format(num_gemm_threads),
             b_index="b_start",
         )}}
     }
-    {% endfor %}
 }
 """
 
@@ -87,6 +87,8 @@ class CppBmmTemplate(CppGemmTemplate):
             should_block_weights=should_block_weights,
             name=name,
         )
+        b = layout.size[0]
+        self.is_dynamic_B = has_free_symbols((b,))
         self.b_index = sympy.Symbol("s_b_index", integer=True, nonnegative=True)
 
     @staticmethod
@@ -182,6 +184,7 @@ class CppBmmTemplate(CppGemmTemplate):
             for s in sym.free_symbols
         ]
         options["kernel_name"] = kernel.kernel_name
+        options["is_dynamic_B"] = self.is_dynamic_B
 
         return options
 
@@ -233,14 +236,13 @@ class CppBmmTemplate(CppGemmTemplate):
     def codegen_threaded_gemms(self):
         result = ""
         # Generate GEMM kernels that use different numbers of threads
-        possible_threads = [1]
+        possible_threads = [1, 48]
         bmm_threading_stages = [threads for threads in possible_threads if threads <= self.num_threads]
-        #bmm_threading_stages = [1, 2, self.num_threads]
-        self.bmm_threading_stages = {
+        self.bmm_threading_fns = {
             threads: f"{self.render_options['kernel_name']}_{threads}_thread_mm"
             for threads in bmm_threading_stages
         }
-        for num_gemm_threads, fn_name in self.bmm_threading_stages.items():
+        for num_gemm_threads, fn_name in self.bmm_threading_fns.items():
             result += self.codegen_num_thread_gemm(num_gemm_threads, fn_name)
         return result
 
