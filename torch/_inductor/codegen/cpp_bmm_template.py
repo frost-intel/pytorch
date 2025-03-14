@@ -35,7 +35,7 @@ extern "C"
 {{kernel.def_kernel(inputs={"X": BX, "W": BW}, outputs={"Y": BY}, aliases=aliases)}}
 {
     const int64_t B = {{kernel.size(BY_2d, 0)}};
-    {%- set num_gemm_threads = 1 if is_dynamic_B or (BY_2dBY_2d.get_size()[0] < 4) else num_threads %}
+    {%- set num_gemm_threads = 1 if is_dynamic_B or (BY_2d.get_size()[0] < 4) else num_threads %}
     {%- if num_gemm_threads != num_threads %}
     #pragma omp parallel for num_threads({{num_threads // num_gemm_threads}})
     {%- endif %}
