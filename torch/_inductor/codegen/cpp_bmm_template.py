@@ -34,19 +34,11 @@ extern "C"
 {{kernel.def_kernel(inputs={"X": BX, "W": BW}, outputs={"Y": BY}, aliases=aliases)}}
 {
     const int64_t B = {{kernel.size(BY_2d, 0)}};
-    int64_t b_ind = 0;
-    int64_t B_thread_block;
-    int64_t num_threads = {{num_threads}};
     {% for num_gemm_threads, fn_name in template.bmm_threading_stages.items() %}
-    B_thread_block = ((B - b_ind) / {{num_threads // num_gemm_threads}}) * {{num_threads // num_gemm_threads}} + b_ind;
     {%- if num_gemm_threads != num_threads %}
-    {%- if num_gemm_threads != 1 %}
-    // If not using 1 or num_threads for each gemm, nested omp parallel for loops require 2 levels of omp active
-    omp_set_max_active_levels(2);
-    {%- endif %}
     #pragma omp parallel for num_threads({{num_threads // num_gemm_threads}})
     {%- endif %}
-    for (int b_start = b_ind; b_start < B_thread_block; ++b_start) {
+    for (int b_start = 0; b_start < B; ++b_start) {
         {{template.get_gemm_function_call(
             kernel=kernel,
             function_name=fn_name,
@@ -54,7 +46,6 @@ extern "C"
             b_index="b_start",
         )}}
     }
-    b_ind = B_thread_block;
     {% endfor %}
 }
 """
@@ -242,7 +233,7 @@ class CppBmmTemplate(CppGemmTemplate):
     def codegen_threaded_gemms(self):
         result = ""
         # Generate GEMM kernels that use different numbers of threads
-        possible_threads = [12, 24, self.num_threads]
+        possible_threads = [1]
         bmm_threading_stages = [threads for threads in possible_threads if threads <= self.num_threads]
         #bmm_threading_stages = [1, 2, self.num_threads]
         self.bmm_threading_stages = {
