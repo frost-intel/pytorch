@@ -236,7 +236,7 @@ class CppBmmTemplate(CppGemmTemplate):
     def codegen_threaded_gemms(self):
         result = ""
         # Generate GEMM kernels that use different numbers of threads
-        possible_threads = [1, 48]
+        possible_threads = [1, self.num_threads]
         bmm_threading_stages = [threads for threads in possible_threads if threads <= self.num_threads]
         self.bmm_threading_fns = {
             threads: f"{self.render_options['kernel_name']}_{threads}_thread_mm"
