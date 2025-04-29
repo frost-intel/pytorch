@@ -1,6 +1,6 @@
 #pragma once
 
-#ifdef USE_C10D_NCCL || USE_C10D_XCCL
+#if defined(USE_C10D_NCCL) || defined(USE_C10D_XCCL)
 
 #if defined(__linux__)
 #include <fcntl.h>
@@ -1404,4 +1404,4 @@ TORCH_API std::future<bool> launchAsyncGilCheck();
 TORCH_API std::string getExceptionMsgFromExceptionPtr();
 } // namespace c10d
 
-#endif // USE_C10D_NCCL
+#endif // USE_C10D_NCCL or USE_C10D_XCCL
