@@ -1,6 +1,6 @@
 #pragma once
 
-#ifdef USE_C10D_NCCL
+#ifdef USE_C10D_NCCL || USE_C10D_XCCL
 
 #if defined(__linux__)
 #include <fcntl.h>
