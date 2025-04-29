@@ -359,7 +359,7 @@ def match_coalesced_groups_with_non_p2p(
 
             # 2. we found a partial match but some ranks are missing
             # 3. we found no match
-            #  -> since its not a complete collective, no entry goes into collectives but we still record a nccl call
+            #  -> since its not a complete collective, no entry goes into collectives but we still record a ccl call
             else:
                 logger.debug("Non-matching collective inside coalesced group")
                 idx_map = {
@@ -569,7 +569,7 @@ def find_coalesced_group(
             break
 
     if len(found) > 1:
-        assert found[-1][1]["profiling_name"] == "nccl:coalesced"
+        assert found[-1][1]["profiling_name"].endswith("ccl:coalesced")
         return found
     return []
 
@@ -603,7 +603,7 @@ def find_coalesced_group_with_non_p2p(
 
     if len(found) > 1:
         name = found[-1][1]["profiling_name"]
-        if name.startswith("nccl:") and not name.endswith("_coalesced"):
+        if name[1:].startswith("ccl:") and not name.endswith("_coalesced"):
             logger.error("Rank %s does not have a coalesced end.", rank)
         return found
     return []

@@ -19,7 +19,7 @@ from tools.flight_recorder.components.types import (
     Group,
     MatchStateRecord,
     Membership,
-    NCCLCall,
+    CCLCall,
     Op,
     Traceback,
 )
@@ -78,7 +78,7 @@ def build_groups_memberships(
     `desc` is provided by the user (optionally) and should be 'meaningful' (e.g. TP/PP/DP group)
     `ranks` is a list of the 'global ranks' that are members of the PG.
 
-    (pg_guid, desc, ranks) tuples are appended lazily to the flight buffer when `getNCCLComm` is called on a PG and
+    (pg_guid, desc, ranks) tuples are appended lazily to the flight buffer when `getCCLComm` is called on a PG and
     the `enabled_` flag is true for that PG.
         - the order of calling (init_process_group, new_group, etc) does not affect the order of the tuples in the list
 
@@ -133,7 +133,7 @@ def build_collectives(
     _memberships: dict[str, set[Any]],
     _pg_guids: dict[tuple[str, int], str],
     version: str,
-) -> tuple[list[Traceback], list[Collective], list[NCCLCall]]:
+) -> tuple[list[Traceback], list[Collective], list[CCLCall]]:
     """
     groups, memberships are the non-flat dicts that are indexable
     all_entries is a raw dict from the original dumps:
@@ -165,17 +165,17 @@ def build_collectives(
     tracebacks: list[Traceback] = []
 
     collectives: list[Collective] = []
-    nccl_calls: list[NCCLCall] = []
+    ccl_calls: list[CCLCall] = []
 
     # once we find one mismatch, we stop pairing up collectives since the pairing is possibly incorrect
-    # instead, just record the remaining ops as NCCLCalls
+    # instead, just record the remaining ops as CCLCalls
     mismatch = {_groups[g].id: 0 for g in _groups}
     MISMATCH_TAIL = 10
 
     # For best effort partial analysis.
     dumps_ranks = {int(key) for key in all_entries.keys()}
     """
-    - it doesn't matter what order I put collectives/ncclops into their table. we can later on re-sort it by start time
+    - it doesn't matter what order I put collectives/cclops into their table. we can later on re-sort it by start time
     - there could be multiple options for the "first" collective to pair up (rank 0,1 might do a bcast while rank 2,3 do a bcast)
     - within a group, the first collective must be the same on all ranks in the group, then it can be marked as a
     collective and removed
@@ -285,12 +285,12 @@ def build_collectives(
                 mismatch[pg_name] += 1
             for r in all_coalesced_entries:
                 idx_map = {r: i for i, _ in reversed(all_coalesced_entries[r])}  # noqa: B035
-                nccl_calls.extend(
+                ccl_calls.extend(
                     reversed(
-                        match_record.entry_state.to_nccl_call(
+                        match_record.entry_state.to_ccl_call(
                             all_entries,
                             idx_map,
-                            len(nccl_calls),
+                            len(ccl_calls),
                             collectives[-1].id if match else None,
                         )
                     )
@@ -334,15 +334,15 @@ def build_collectives(
                     r: match_record.found_idx[r] if r != first_rank else 0
                     for r in match_record.found_ranks
                 }
-                nccl_calls.extend(
-                    match_record.entry_state.to_nccl_call(
-                        all_entries, idx_map, len(nccl_calls), collectives[-1].id
+                ccl_calls.extend(
+                    match_record.entry_state.to_ccl_call(
+                        all_entries, idx_map, len(ccl_calls), collectives[-1].id
                     )
                 )
 
             # 2. we found a partial match but some ranks are missing
             # 3. we found no match
-            #  -> since its not a complete collective, no entry goes into collectives but we still record a nccl call
+            #  -> since its not a complete collective, no entry goes into collectives but we still record a ccl call
             #     TODO should there be a way to mark 'mismatches'?
             else:
                 logger.debug("appending a non-matching collective")
@@ -358,9 +358,9 @@ def build_collectives(
                         all_entries=all_entries,
                     )
                 )
-                nccl_calls.extend(
-                    match_record.entry_state.to_nccl_call(
-                        all_entries, idx_map, len(nccl_calls), None
+                ccl_calls.extend(
+                    match_record.entry_state.to_ccl_call(
+                        all_entries, idx_map, len(ccl_calls), None
                     )
                 )
 
@@ -370,7 +370,7 @@ def build_collectives(
             )
             break
 
-    return tracebacks, collectives, nccl_calls
+    return tracebacks, collectives, ccl_calls
 
 
 def build_db(
@@ -405,10 +405,10 @@ def build_db(
         just_print_entries(entries, _groups, _memberships, _pg_guids, args)
         sys.exit(0)
 
-    tracebacks, collectives, nccl_calls = build_collectives(
+    tracebacks, collectives, ccl_calls = build_collectives(
         entries, _groups, _memberships, _pg_guids, version
     )
-    logger.debug("built collectives, nccl_calls")
+    logger.debug("built collectives, ccl_calls")
     if args.verbose:
         logger.debug("Groups")
         logger.debug(tabulate(groups, headers=Group._fields))
@@ -416,12 +416,12 @@ def build_db(
         logger.debug(tabulate(memberships, headers=Membership._fields))
         logger.debug("Collectives")
         logger.debug(tabulate(collectives, headers=Collective._fields))
-        logger.debug("NCCLCalls")
-        logger.debug(tabulate(nccl_calls, headers=NCCLCall._fields))
+        logger.debug("CCLCalls")
+        logger.debug(tabulate(ccl_calls, headers=CCLCall._fields))
     db = Database(
         tracebacks=tracebacks,
         collectives=collectives,
-        ncclcalls=nccl_calls,
+        cclcalls=ccl_calls,
         groups=groups,
         memberships=memberships,
     )

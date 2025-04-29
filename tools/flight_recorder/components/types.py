@@ -98,10 +98,10 @@ Process:
     pid: int
     hostname: str
 
-NCCLOp:
-    # nccl op implementation details (sends/recv)
+CCLOp:
+    # (n/x)ccl op implementation details (sends/recv)
     id: int
-    nccl_call_id: int
+    (n/x)ccl_call_id: int
 
 """
 
@@ -143,7 +143,7 @@ class Collective(NamedTuple):
     type_of_mismatch: Optional[MatchInfo] = None
 
 
-class NCCLCall(NamedTuple):
+class CCLCall(NamedTuple):
     id: int
     collective_id: Ref[Collective]
     group_id: str
@@ -158,7 +158,7 @@ class Database(NamedTuple):
     memberships: list[Membership]
     tracebacks: list[Traceback]
     collectives: list[Collective]
-    ncclcalls: list[NCCLCall]
+    cclcalls: list[CCLCall]
 
 
 # TODO: We need to add a schema for the following
@@ -350,19 +350,19 @@ class EntryState:
                 mismatch_collectives=mismatch_collectives,
             )
 
-    def to_nccl_call(
+    def to_ccl_call(
         self,
         all_entries: dict[int, list[dict[str, Any]]],
         idx_map: dict[int, int],
-        nccl_call_id: int,
+        ccl_call_id: int,
         collective_id: Any,
-    ) -> list[NCCLCall]:
+    ) -> list[CCLCall]:
         result = []
         for i, k in idx_map.items():
             all_entries[i].pop(k)
             result.append(
-                NCCLCall(
-                    id=nccl_call_id,
+                CCLCall(
+                    id=ccl_call_id,
                     collective_id=collective_id,
                     group_id=self.pg_name,  # type: ignore[arg-type]
                     global_rank=i,
@@ -371,7 +371,7 @@ class EntryState:
                     sizes=self.input_sizes,
                 )
             )
-            nccl_call_id += 1
+            ccl_call_id += 1
         return result
 
 
@@ -388,8 +388,8 @@ class Op:
         self, event: dict[Any, Any], memberships: dict[str, set[Any]], pg_name: str
     ):
         self.profiling_name = event["profiling_name"]
-        nccl, name = self.profiling_name.split(":")
-        assert nccl == "nccl", f"name formatting error? {nccl} != 'nccl'"
+        ccl_name, name = self.profiling_name.split(":")
+        assert ccl_name in ["nccl", "xccl"], f"name formatting error? {ccl_name} is not 'nccl' or 'xccl'"
         parts = name.split(" ")
         type = parts[0]
         meta = parts[1] if len(parts) == 2 else None

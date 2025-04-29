@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ATen/core/AcceleratorEvent.h>
 #include <ATen/cuda/ATenCUDAGeneral.h>
 #include <ATen/cuda/CUDAContext.h>
 #include <c10/core/impl/GPUTrace.h>
@@ -25,7 +26,7 @@ namespace at::cuda {
 * called before the event is ever recorded, it will use the current device.
 * Later streams that record the event must match this device.
 */
-struct TORCH_CUDA_CPP_API CUDAEvent {
+struct TORCH_CUDA_CPP_API CUDAEvent: public at::AcceleratorEvent {
   // Constructors
   // Default value for `flags` is specified below - it's cudaEventDisableTiming
   CUDAEvent() noexcept = default;
@@ -85,7 +86,7 @@ struct TORCH_CUDA_CPP_API CUDAEvent {
   cudaEvent_t event() const { return event_; }
 
   // Note: cudaEventQuery can be safely called from any device
-  bool query() const {
+  bool query() const override {
     if (!is_created_) {
       return true;
     }
@@ -146,7 +147,7 @@ struct TORCH_CUDA_CPP_API CUDAEvent {
   }
 
   // Note: cudaEventElapsedTime can be safely called from any device
-  float elapsed_time(const CUDAEvent& other) const {
+  float elapsed_time(const CUDAEvent& other) const override {
     TORCH_CHECK_VALUE(
         !(flags_ & cudaEventDisableTiming) && !(other.flags_ & cudaEventDisableTiming),
         "Both events must be created with argument 'enable_timing=True'.");
@@ -164,7 +165,7 @@ struct TORCH_CUDA_CPP_API CUDAEvent {
     CUDAGuard guard(device_index_);
     // raise cudaErrorNotReady if either event is recorded but not yet completed
     AT_CUDA_CHECK(cudaEventElapsedTime(&time_ms, event_, other.event_));
-    return time_ms;
+    return static_cast<double>(time_ms);
   }
 
   // Note: cudaEventSynchronize can be safely called from any device

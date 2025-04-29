@@ -1,5 +1,6 @@
 #pragma once
 #include <ATen/xpu/XPUContext.h>
+#include <ATen/core/AcceleratorEvent.h>
 
 #include <optional>
 
@@ -17,7 +18,7 @@ namespace at::xpu {
  * not available. This could impact some applications that rely on cross-process
  * synchronization and communication.
  */
-struct TORCH_XPU_API XPUEvent {
+struct TORCH_XPU_API XPUEvent : public at::AcceleratorEvent {
   // Constructors
   XPUEvent(bool enable_timing = false) noexcept
       : enable_timing_{enable_timing} {}
@@ -62,7 +63,7 @@ struct TORCH_XPU_API XPUEvent {
     return *event_;
   }
 
-  bool query() const {
+  bool query() const override {
     using namespace sycl::info;
     if (!isCreated()) {
       return true;
@@ -125,7 +126,7 @@ struct TORCH_XPU_API XPUEvent {
     }
   }
 
-  double elapsed_time(const XPUEvent& other) const {
+  double elapsed_time(const XPUEvent& other) const override {
     TORCH_CHECK(
         isCreated() && other.isCreated(),
         "Both events must be recorded before calculating elapsed time.");
