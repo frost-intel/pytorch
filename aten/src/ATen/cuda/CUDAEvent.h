@@ -147,15 +147,16 @@ struct TORCH_CUDA_CPP_API CUDAEvent: public at::AcceleratorEvent {
   }
 
   // Note: cudaEventElapsedTime can be safely called from any device
-  float elapsed_time(const CUDAEvent& other) const override {
+  double elapsed_time(const at::AcceleratorEvent& other) const override {
+    const auto& other_event = static_cast<const CUDAEvent&>(other);
     TORCH_CHECK_VALUE(
-        !(flags_ & cudaEventDisableTiming) && !(other.flags_ & cudaEventDisableTiming),
+        !(flags_ & cudaEventDisableTiming) && !(other_event.flags_ & cudaEventDisableTiming),
         "Both events must be created with argument 'enable_timing=True'.");
     TORCH_CHECK_VALUE(
-        is_created_ && other.isCreated(),
+        is_created_ && other_event.isCreated(),
         "Both events must be recorded before calculating elapsed time.");
     TORCH_CHECK(
-        query() && other.query(),
+        query() && other_event.query(),
         "Both events must be completed before calculating elapsed time.");
 
     float time_ms = 0;
@@ -164,7 +165,7 @@ struct TORCH_CUDA_CPP_API CUDAEvent: public at::AcceleratorEvent {
     // create a new cuda context, which will consume a lot of memory.
     CUDAGuard guard(device_index_);
     // raise cudaErrorNotReady if either event is recorded but not yet completed
-    AT_CUDA_CHECK(cudaEventElapsedTime(&time_ms, event_, other.event_));
+    AT_CUDA_CHECK(cudaEventElapsedTime(&time_ms, event_, other_event.event_));
     return static_cast<double>(time_ms);
   }
 
