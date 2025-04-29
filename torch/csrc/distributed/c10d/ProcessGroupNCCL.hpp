@@ -1399,6 +1399,9 @@ get_cpp_trace_dumper();
 typedef bool (*gil_checker_t)();
 
 TORCH_API gil_checker_t& get_gil_checker();
+
+TORCH_API std::future<bool> launchAsyncGilCheck();
+TORCH_API std::string getExceptionMsgFromExceptionPtr();
 } // namespace c10d
 
 #endif // USE_C10D_NCCL

@@ -444,7 +444,7 @@ gil_checker_t& get_gil_checker() {
   return gil_checker;
 }
 
-static std::future<bool> launchAsyncGilCheck() {
+std::future<bool> launchAsyncGilCheck() {
   std::promise<bool> resultPromise;
   std::future<bool> resultFuture = resultPromise.get_future();
   TORCH_CHECK(get_gil_checker(), "Can't check GIL with null GIL checker");
