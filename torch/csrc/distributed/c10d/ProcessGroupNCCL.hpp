@@ -1,6 +1,6 @@
 #pragma once
 
-#if defined(USE_C10D_NCCL) || defined(USE_C10D_XCCL)
+#ifdef USE_C10D_NCCL
 
 #if defined(__linux__)
 #include <fcntl.h>
@@ -1399,9 +1399,6 @@ get_cpp_trace_dumper();
 typedef bool (*gil_checker_t)();
 
 TORCH_API gil_checker_t& get_gil_checker();
-
-TORCH_API std::future<bool> launchAsyncGilCheck();
-TORCH_API std::string getExceptionMsgFromExceptionPtr();
 } // namespace c10d
 
-#endif // USE_C10D_NCCL or USE_C10D_XCCL
+#endif // USE_C10D_NCCL
