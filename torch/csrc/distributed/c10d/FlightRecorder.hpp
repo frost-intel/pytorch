@@ -1,7 +1,7 @@
 #pragma once
 
-// TODO: Make Fligth Recorder device agnostic
-#ifdef USE_C10D_NCCL or USE_C10D_XCCL
+// TODO: Make Flight Recorder device agnostic
+#if defined(USE_C10D_NCCL) || defined(USE_C10D_XCCL)
 
 #include <cstdio>
 #include <cstdlib>
@@ -256,4 +256,4 @@ struct FlightRecorder {
 
 } // namespace c10d
 
-#endif // USE_C10D_NCCL
+#endif // USE_C10D_NCCL || USE_C10D_XCCL
