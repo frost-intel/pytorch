@@ -1,5 +1,5 @@
 // TODO: Make Fligth Recorder device agnostic
-#ifdef USE_C10D_NCCL or USE_C10D_XCCL
+#if defined(USE_C10D_NCCL) || defined(USE_C10D_XCCL)
 
 #include <cuda_runtime.h>
 #include <nlohmann/json.hpp>
