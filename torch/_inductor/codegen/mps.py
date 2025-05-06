@@ -91,12 +91,18 @@ class MetalExprPrinter(ExprPrinter_):
     def _print_Min(self, expr: sympy.Expr) -> str:
         if len(expr.args) != 2:
             raise RuntimeError("metal::min only supported for 2 args")
-        return f"metal::min({', '.join(map(self._print, expr.args))})"
+        a, b = map(self._print, expr.args)
+        typecast_a = f"static_cast<decltype({a}+{b})>({a})"
+        typecast_b = f"static_cast<decltype({a}+{b})>({b})"
+        return f"metal::min({typecast_a}, {typecast_b})"
 
     def _print_Max(self, expr: sympy.Expr) -> str:
         if len(expr.args) != 2:
             raise RuntimeError("metal::max only supported for 2 args")
-        return f"metal::max({', '.join(map(self._print, expr.args))})"
+        a, b = map(self._print, expr.args)
+        typecast_a = f"static_cast<decltype({a}+{b})>({a})"
+        typecast_b = f"static_cast<decltype({a}+{b})>({b})"
+        return f"metal::max({typecast_a}, {typecast_b})"
 
     def _print_Abs(self, expr: sympy.Expr) -> str:
         assert len(expr.args) == 1
@@ -345,11 +351,12 @@ class MetalOverrides(OpOverrides):
 
     @staticmethod
     def truncdiv(a: CSEVariable, b: CSEVariable) -> str:
-        # Upcast to float otherwise the generated code doesn't typecheck.
-        # TODO (dcci): remove this workaround
-        float_a = f"static_cast<float>({a})" if a.dtype != torch.float else a
-        float_b = f"static_cast<float>({b})" if b.dtype != torch.float else b
-        return f"metal::trunc({float_a}/{float_b})"
+        quot = f"{a} / {b}"
+        if (a.dtype is not None and a.dtype.is_floating_point) or (
+            b.dtype is not None and b.dtype.is_floating_point
+        ):
+            return f"metal::trunc({quot})"
+        return quot
 
     @staticmethod
     def ceil(x: CSEVariable) -> str:
@@ -821,6 +828,10 @@ class MetalKernel(SIMDKernel):
     def call_kernel(self, name: str, node: Any = None) -> None:
         """Codegen a call to this kernel"""
         wrapper = V.graph.wrapper_code
+        # Make sure sizevarss has been computed
+        for v in self.args.sizevars.keys():
+            wrapper.ensure_size_computed(v)
+
         args = [*self.args.output_buffers.keys(), *self.args.input_buffers.keys()]
         args = [arg for arg in args if arg not in self.removed_buffers]
         args += [str(v) for v in self.args.sizevars.keys()]
