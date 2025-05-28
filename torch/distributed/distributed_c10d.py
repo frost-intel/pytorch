@@ -1997,6 +1997,8 @@ def _new_process_group_helper(
             backend_class = ProcessGroupXCCL(
                 backend_prefix_store, group_rank, group_size
             )
+            backend_class.options.global_ranks_in_group = global_ranks_in_group
+            backend_class.options.group_name = group_name
             backend_type = ProcessGroup.BackendType.XCCL
         else:
             assert backend_str.upper() in Backend._plugins, (

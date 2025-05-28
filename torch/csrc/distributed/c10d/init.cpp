@@ -3296,6 +3296,15 @@ Example::
               py::arg("store"),
               py::arg("rank"),
               py::arg("size"));
+
+    intrusive_ptr_class_<::c10d::ProcessGroupXCCL::Options>(
+        processGroupXCCL, "Options", backendOptions)
+        .def(py::init<>())
+        .def_readwrite(
+            "global_ranks_in_group",
+            &::c10d::ProcessGroupXCCL::Options::global_ranks_in_group)
+        .def_readwrite(
+            "group_name", &::c10d::ProcessGroupXCCL::Options::group_name);
 #endif
 
 #ifdef USE_C10D_UCC

@@ -15,6 +15,9 @@
 #ifdef USE_C10D_NCCL
 #include <torch/csrc/distributed/c10d/ProcessGroupNCCL.hpp>
 #endif // USE_C10D_NCCL
+#ifdef USE_C10D_XCCL
+#include <torch/csrc/distributed/c10d/ProcessGroupXCCL.hpp>
+#endif // USE_C10D_XCCL
 #include <torch/csrc/distributed/c10d/control_plane/Handlers.hpp>
 
 namespace c10d {
@@ -121,6 +124,17 @@ float getDurationFromEvent(
       ncclEndEvent.query(),
       "getDuration can only be called after work is succeeded.")
   return ncclStartEvent.elapsed_time(ncclEndEvent);
+}
+#endif // USE_C10D_NCCL
+
+#ifdef USE_C10D_XCCL
+static float getDurationFromEvent(
+    at::xpu::XPUEvent& xcclStartEvent,
+    at::xpu::XPUEvent& xcclEndEvent) {
+  TORCH_CHECK(
+      xcclEndEvent.query(),
+      "getDuration can only be called after work is succeeded.")
+  return xcclStartEvent.elapsed_time(xcclEndEvent);
 }
 #endif // USE_C10D_NCCL
 
@@ -731,4 +745,7 @@ template struct FlightRecorder<c10::Event>;
 #ifdef USE_C10D_NCCL
 template struct FlightRecorder<at::cuda::CUDAEvent>;
 #endif // USE_C10D_NCCL
+#ifdef USE_C10D_XCCL
+template struct FlightRecorder<at::xpu::XPUEvent>;
+#endif // USE_C10D_XCCL
 } // namespace c10d
