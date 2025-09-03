@@ -60,6 +60,7 @@ from torch.testing._internal.common_utils import (
     get_cycles_per_ms,
     TEST_CUDA,
     TEST_HPU,
+    TEST_WITH_EXTERNAL_MULTIPROCESSING,
     TEST_XPU,
 )
 from torch.utils._triton import has_triton
@@ -1122,12 +1123,15 @@ def check_sharded_parity(
         assert isinstance(sharded_param.grad, DTensor)  # mypy
         cls.assertEqual(sharded_param.grad.to_local(), sharded_ref_grad.to_local())
 
+
 def skip_if_not_support_multithread():
     def decorator(cls):
         if TEST_XPU:
             return unittest.skip(TEST_SKIPS["not-support-multithread"].message)(cls)
         return cls
+
     return decorator
+
 
 @unittest.skipIf(TEST_XPU, "not-support-multithread")
 class FSDPTestMultiThread(MultiThreadedTestCase):
@@ -1156,10 +1160,15 @@ class FSDPTest(MultiProcessTestCase):
         # which can cause unit test flakiness:
         # https://github.com/pytorch/pytorch/issues/90848
         os.environ["TORCH_NCCL_DESYNC_DEBUG"] = "0"
-        self._spawn_processes()
+        if TEST_WITH_EXTERNAL_MULTIPROCESSING:
+            self._run_external_multiprocessing()
+        else:
+            self._spawn_processes()
 
     @property
     def world_size(self):
+        if TEST_WITH_EXTERNAL_MULTIPROCESSING:
+            return MultiProcessTestCase._get_world_size() or DEVICE_COUNT
         return DEVICE_COUNT
 
     @property
@@ -1173,6 +1182,8 @@ class FSDPTest(MultiProcessTestCase):
 
     @property
     def init_method(self):
+        if TEST_WITH_EXTERNAL_MULTIPROCESSING:
+            return None
         return f"{FILE_SCHEMA}{self.file_name}"
 
     def _check_cpu_offload(self, fsdp_model, cpu_offload):
@@ -1188,14 +1199,17 @@ class FSDPTest(MultiProcessTestCase):
         return run_subtests(self, *args, **kwargs)
 
     @classmethod
-    def _run(cls, rank, test_name, file_name, pipe, **kwargs):  # type: ignore[override]
+    def _run(cls, rank, test_name, file_name, pipe=None, **kwargs):  # type: ignore[override]
         self = cls(test_name)
         self.rank = rank
         self.file_name = file_name
         fake_pg = kwargs.get("fake_pg", False)
 
         print(f"dist init r={self.rank}, world={self.world_size}")
-        if torch.accelerator.device_count() < self.world_size:
+        if (
+            not TEST_WITH_EXTERNAL_MULTIPROCESSING
+            and torch.accelerator.device_count() < self.world_size
+        ):
             sys.exit(TEST_SKIPS[f"multi-gpu-{self.world_size}"].exit_code)
 
         # Specify gloo backend to make 'init_process_group()' succeed,
@@ -1210,12 +1224,13 @@ class FSDPTest(MultiProcessTestCase):
                     store=store,
                 )
             else:
-                dist.init_process_group(
-                    init_method=self.init_method,
-                    backend=DISTRIBUTED_BACKEND,
-                    world_size=int(self.world_size),
-                    rank=self.rank,
-                )
+                if not dist.is_initialized():
+                    dist.init_process_group(
+                        init_method=self.init_method,
+                        backend=DISTRIBUTED_BACKEND,
+                        world_size=int(self.world_size),
+                        rank=self.rank,
+                    )
         except RuntimeError as e:
             if "recompile" in e.args[0]:
                 sys.exit(TEST_SKIPS["backend_unavailable"].exit_code)
@@ -1234,12 +1249,16 @@ class FSDPTest(MultiProcessTestCase):
         dist.barrier(device_ids=device_ids)
 
         torch._dynamo.reset()
-        self.run_test(test_name, pipe)
+        if pipe is not None:
+            self.run_test(test_name, pipe)
+        else:
+            self.run_test(test_name)
         torch._dynamo.reset()
 
         dist.barrier(device_ids=device_ids)
 
-        dist.destroy_process_group()
+        if not TEST_WITH_EXTERNAL_MULTIPROCESSING:
+            dist.destroy_process_group()
 
     def _train_for_several_steps(
         self,
@@ -1383,7 +1402,11 @@ class FSDPTest(MultiProcessTestCase):
                     model, device_ids=[DEVICE_TYPE], output_device=DEVICE_TYPE
                 )
             else:
-                ref_model = DDP(model, device_ids=[rank], output_device=rank)
+                ref_model = DDP(
+                    model,
+                    device_ids=[rank % DEVICE_COUNT],
+                    output_device=(rank % DEVICE_COUNT),
+                )
         else:
             ref_model = ref_init_fn(model)
         if use_pure_fp16:
