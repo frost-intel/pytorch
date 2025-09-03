@@ -43,6 +43,7 @@ from torch.testing._internal.common_utils import (
     skip_but_pass_in_sandcastle_if,
     TEST_CUDA,
     TEST_HPU,
+    TEST_WITH_EXTERNAL_MULTIPROCESSING,
     TEST_WITH_ROCM,
     TEST_WITH_TSAN,
     TEST_XPU,
@@ -237,7 +238,7 @@ def skip_if_not_powerof2_worldsize_xpu():
                 print(f"skip_if_not_powerof2_worldsize_xpu x: {x}")
                 if (x & (x - 1)) == 0:
                     return func(*args, **kwargs)
-                sys.exit(TEST_SKIPS[f"power-of-two"].exit_code)
+                sys.exit(TEST_SKIPS["power-of-two"].exit_code)
             return func(*args, **kwargs)
 
         return wrapper
@@ -371,12 +372,15 @@ def requires_nccl_version(version, msg):
             f"Requires NCCL version greater than or equal to: {version}, found: {torch.cuda.nccl.version()}, reason: {msg}",
         )
 
+
 def requires_nccl_version_or(version, msg, backends):
-    assert(isinstance(backends, list))
+    assert isinstance(backends, list)
     if not c10d.is_nccl_available():
         return skip_but_pass_in_sandcastle_if(
-            'xccl' not in backends if c10d.is_xccl_available() else True,
-            "c10d was not compiled with the NCCL backend and " + str(backends) + " backend.",
+            "xccl" not in backends if c10d.is_xccl_available() else True,
+            "c10d was not compiled with the NCCL backend and "
+            + str(backends)
+            + " backend.",
         )
     else:
         return skip_but_pass_in_sandcastle_if(
@@ -384,25 +388,29 @@ def requires_nccl_version_or(version, msg, backends):
             f"Requires NCCL version greater than or equal to: {version}, found: {torch.cuda.nccl.version()}, reason: {msg}",
         )
 
+
 def requires_nccl():
     return skip_but_pass_in_sandcastle_if(
         not c10d.is_nccl_available(),
         "c10d was not compiled with the NCCL backend",
     )
 
+
 def requires_nccl_or(backends):
-    assert(isinstance(backends, list))
+    assert isinstance(backends, list)
     return skip_but_pass_in_sandcastle_if(
-        not c10d.is_nccl_available() and
-        ( not c10d.is_xccl_available() if 'xccl' in backends else True ),
+        not c10d.is_nccl_available()
+        and (not c10d.is_xccl_available() if "xccl" in backends else True),
         "c10d was not compiled with the NCCL backend or " + str(backends) + " backend.",
     )
+
 
 def requires_xccl():
     return skip_but_pass_in_sandcastle_if(
         not c10d.is_xccl_available(),
         "c10d was not compiled with the XCCL backend",
     )
+
 
 def requires_ucc():
     return skip_but_pass_in_sandcastle_if(
@@ -712,11 +720,11 @@ def cleanup_temp_dir() -> None:
 # Most tests operate with this worldsize
 DEFAULT_WORLD_SIZE = 4
 
-# [How does MultiProcessTestCase work?]
-# Each MultiProcessTestCase instance uses 1 + `world_size()` processes, by
+# [How does TorchMultiProcessTestCase work?]
+# Each TorchMultiProcessTestCase instance uses 1 + `world_size()` processes, by
 # default `world_size()` returns 4. Let's take `test_rpc_spawn.py` as an
 # example which inherits from this class. Its `Setup()` methods calls into
-# `MultiProcessTestCase._spawn_processes()` which spawns `world_size()`
+# `TorchMultiProcessTestCase._spawn_processes()` which spawns `world_size()`
 # subprocesses. During the spawn, the main process passes the test name to
 # subprocesses, and the name is acquired from self.id(). The subprocesses
 # then use the provided test function name to retrieve the function attribute
@@ -724,7 +732,7 @@ DEFAULT_WORLD_SIZE = 4
 # subprocesses to join.
 
 
-class MultiProcessTestCase(TestCase):
+class TorchMultiProcessTestCase(TestCase):
     MAIN_PROCESS_RANK = -1
     # This exit code is used to indicate that the test code had an error and
     # exited abnormally. There are certain tests that might use sys.exit() to
@@ -859,7 +867,7 @@ class MultiProcessTestCase(TestCase):
                 event = parent_pipe.recv()
                 logger.info("Received event %s on process %s", event, rank)
 
-                if event == MultiProcessTestCase.Event.GET_TRACEBACK:
+                if event == TorchMultiProcessTestCase.Event.GET_TRACEBACK:
                     # Return traceback to the parent process.
                     with tempfile.NamedTemporaryFile(mode="r+") as tmp_file:
                         faulthandler.dump_traceback(tmp_file)
@@ -886,7 +894,7 @@ class MultiProcessTestCase(TestCase):
         # Start event listener thread.
         signal_recv_pipe, signal_send_pipe = torch.multiprocessing.Pipe(duplex=False)
         event_listener_thread = threading.Thread(
-            target=MultiProcessTestCase._event_listener,
+            target=TorchMultiProcessTestCase._event_listener,
             args=(parent_pipe, signal_recv_pipe, self.rank),
             daemon=True,
         )
@@ -915,11 +923,11 @@ class MultiProcessTestCase(TestCase):
                 "Caught exception: \n%s exiting process %s with exit code: %s",
                 traceback.format_exc(),
                 self.rank,
-                MultiProcessTestCase.TEST_ERROR_EXIT_CODE,
+                TorchMultiProcessTestCase.TEST_ERROR_EXIT_CODE,
             )
             # Send error to parent process.
             parent_pipe.send(traceback.format_exc())
-            sys.exit(MultiProcessTestCase.TEST_ERROR_EXIT_CODE)
+            sys.exit(TorchMultiProcessTestCase.TEST_ERROR_EXIT_CODE)
         finally:
             if signal_send_pipe is not None:
                 signal_send_pipe.send(None)
@@ -943,7 +951,7 @@ class MultiProcessTestCase(TestCase):
             if process.exitcode is None:
                 pipe = self.pid_to_pipe[process.pid]
                 try:
-                    pipe.send(MultiProcessTestCase.Event.GET_TRACEBACK)
+                    pipe.send(TorchMultiProcessTestCase.Event.GET_TRACEBACK)
                     pipes.append((i, pipe))
                 except ConnectionError as e:
                     logger.error(
@@ -989,7 +997,7 @@ class MultiProcessTestCase(TestCase):
                 for i, p in enumerate(self.processes):
                     # This is the exit code processes exit with if they
                     # encountered an exception.
-                    if p.exitcode == MultiProcessTestCase.TEST_ERROR_EXIT_CODE:
+                    if p.exitcode == TorchMultiProcessTestCase.TEST_ERROR_EXIT_CODE:
                         print(
                             f"Process {i} terminated with exit code {p.exitcode}, terminating remaining processes."
                         )
@@ -1045,7 +1053,7 @@ class MultiProcessTestCase(TestCase):
         errored_processes = [
             (i, p)
             for i, p in enumerate(self.processes)
-            if p.exitcode == MultiProcessTestCase.TEST_ERROR_EXIT_CODE
+            if p.exitcode == TorchMultiProcessTestCase.TEST_ERROR_EXIT_CODE
         ]
         if errored_processes:
             error = ""
@@ -1053,7 +1061,7 @@ class MultiProcessTestCase(TestCase):
                 # Get error from pipe.
                 error_message = self.pid_to_pipe[process.pid].recv()
                 error += (
-                    f"Process {i} exited with error code {MultiProcessTestCase.TEST_ERROR_EXIT_CODE} "
+                    f"Process {i} exited with error code {TorchMultiProcessTestCase.TEST_ERROR_EXIT_CODE} "
                     f"and exception:\n{error_message}\n"
                 )
 
@@ -1104,6 +1112,185 @@ class MultiProcessTestCase(TestCase):
         return self.rank == 0
 
 
+class ExternalMultiProcessTestCase(TestCase):
+    TEST_ERROR_EXIT_CODE: int = 11
+
+    RANK_ENV_VARS: list[str] = ["RANK", "PALS_RANKID", "SLURM_PROCID"]
+    LOCAL_RANK_ENV_VARS: list[str] = [
+        "LOCAL_RANK",
+        "PALS_LOCAL_RANKID",
+        "SLURM_LOCALID",
+    ]
+
+    def __init__(
+        self, method_name: str = "runTest", methodName: str = "runTest"
+    ) -> None:
+        """
+        Initializes the instance with the specified test method name.
+
+        Args:
+            method_name (str, optional): The name of the test method to run. Defaults to "runTest".
+            methodName (str, optional): Alternative way to specify the test method name. If provided and not "runTest", it overrides `method_name`.
+
+        Notes:
+            - If `methodName` is not "runTest", it takes precedence over `method_name`.
+            - Initializes `rank` and `local_rank` attributes to 0.
+        """
+        if methodName != "runTest":
+            method_name = methodName
+        super().__init__(method_name)
+        self.rank = 0
+        self.local_rank = 0
+
+    def setUp(self) -> None:
+        """
+        Set up the test case environment by initializing process rank and local rank.
+
+        This method overrides the parent setUp method to:
+        - Set `self.rank` to the global rank of the current process, falling back to an existing `rank` attribute or 0 if unavailable.
+        - Set `self.local_rank` to the local rank of the current process, falling back to an existing `local_rank` attribute or 0 if unavailable.
+        - Initialize `self.file_name` to None.
+        """
+        super().setUp()
+        self.rank = ExternalMultiProcessTestCase._get_rank(local_rank=False) or getattr(
+            self, "rank", 0
+        )
+        self.local_rank = ExternalMultiProcessTestCase._get_rank(
+            local_rank=True
+        ) or getattr(self, "local_rank", 0)
+        self.file_name = None
+
+    @staticmethod
+    def _get_rank(local_rank: bool) -> Optional[int]:
+        """
+        Retrieves the (global or local) rank of the current process from environment variables.
+
+        Args:
+            local_rank (bool): If True, retrieves the local rank; otherwise, retrieves the global rank.
+
+        Returns:
+            Optional[int]: The rank as an integer if found otherwise None.
+        """
+        if local_rank:
+            rank_type_str = "local rank"
+            rank_env_vars = ExternalMultiProcessTestCase.LOCAL_RANK_ENV_VARS
+        else:
+            rank_type_str = "(global) rank"
+            rank_env_vars = ExternalMultiProcessTestCase.RANK_ENV_VARS
+        for env in rank_env_vars:
+            if env in os.environ:
+                try:
+                    return int(os.environ[env])
+                except ValueError:
+                    logger.warning(
+                        f"Environment variable {env} is set but is not an integer: {os.environ[env]}"
+                    )
+        logger.warning(
+            f"Unable to retrieve the {rank_type_str} ID from the environment variables: {', '.join(rank_env_vars)}"
+        )
+        return None
+
+    @staticmethod
+    def _get_world_size() -> Optional[int]:
+        """
+        Returns the world size which corresponds to the total number of processes for distributed tests.
+
+        This static method checks if the "WORLD_SIZE" environment variable is set.
+        If set, the method attempts to convert its value to an integer and return it.
+        If the value cannot be converted to an integer, a warning is logged and None is returned.
+        If the "WORLD_SIZE" environment variable is not set, then the method returns None.
+
+        Returns:
+            Optional[int]: The world size as an integer otherwise None.
+        """
+        if "WORLD_SIZE" in os.environ:
+            try:
+                return int(os.environ["WORLD_SIZE"])
+            except ValueError:
+                logger.warning(
+                    f"Environment variable WORLD_SIZE is set but is not an integer: {os.environ['WORLD_SIZE']}"
+                )
+        return None
+
+    @property
+    def world_size(self) -> int:
+        """
+        Returns the world size (number of processes) for distributed tests.
+
+        This method tries to retrieve the world size by calling the class method `_get_world_size()`.
+        If None is returned, it logs a warning and returns a default value (`DEFAULT_WORLD_SIZE`).
+
+        Returns:
+            int: The total number of processes participating in the distributed test.
+        """
+        world_size = ExternalMultiProcessTestCase._get_world_size()
+        if world_size is None:
+            logger.warning(
+                f'"WORLD_SIZE" not set in environment, falling back to DEFAULT_WORLD_SIZE={DEFAULT_WORLD_SIZE}'
+            )
+            return DEFAULT_WORLD_SIZE
+        return world_size
+
+    def run_test(self, test_name: str) -> None:
+        return
+        if sys.platform != "win32" and sys.platform != "darwin":
+            torch._C._set_print_stack_traces_on_fatal_signal(True)
+        os.environ["TORCH_SHOW_CPP_STACKTRACES"] = "1"
+        try:
+            getattr(self, test_name)()
+        except unittest.SkipTest as se:
+            logger.info(
+                "Rank %s skipping test %s for following reason: %s",
+                self.rank,
+                test_name,
+                str(se),
+            )
+            sys.exit(TEST_SKIPS["generic"].exit_code)
+        except Exception:
+            logger.error(
+                "Caught exception: \n%s exiting process %s with exit code: %s",
+                traceback.format_exc(),
+                self.rank,
+                ExternalMultiProcessTestCase.TEST_ERROR_EXIT_CODE,
+            )
+            sys.exit(ExternalMultiProcessTestCase.TEST_ERROR_EXIT_CODE)
+        finally:
+            if self.destroy_pg_upon_exit:
+                try:
+                    c10d.destroy_process_group()
+                except (AssertionError, ValueError):
+                    pass
+
+    @classmethod
+    def _run(cls, rank: int, test_name: str, file_name: str, **kwargs) -> None:
+        self = cls(test_name)
+        self.rank = rank
+        self.file_name = file_name
+        self.run_test(test_name)
+
+    def _run_external_multiprocessing(self) -> None:
+        self.__class__._run(
+            self.rank,
+            self._current_test_name,
+            self.file_name,
+            local_rank=self.local_rank,
+        )
+
+    @property
+    def _current_test_name(self) -> str:
+        return self.id().split(".")[-1]
+
+    @property
+    def destroy_pg_upon_exit(self) -> bool:
+        return True
+
+
+if TEST_WITH_EXTERNAL_MULTIPROCESSING:
+    MultiProcessTestCase = ExternalMultiProcessTestCase
+else:
+    MultiProcessTestCase = TorchMultiProcessTestCase
+
+
 # Utility base class for distributed Multi Process Test cases
 # This abstracts the PG creation and deletion, the backends are selected based
 # on device type. The tests functions can be instantiated per device type using
@@ -1113,17 +1300,21 @@ class DistributedTestBase(MultiProcessTestCase):
     def setUp(self):
         super().setUp()
         os.environ["WORLD_SIZE"] = str(self.world_size)
-        self._spawn_processes()
+        if TEST_WITH_EXTERNAL_MULTIPROCESSING:
+            self._run_external_multiprocessing()
+        else:
+            self._spawn_processes()
 
     def tearDown(self):
         try:
             torch.distributed.destroy_process_group()
         except AssertionError:
             pass
-        try:
-            os.remove(self.file_name)
-        except OSError:
-            pass
+        if self.file_name is not None:
+            try:
+                os.remove(self.file_name)
+            except OSError:
+                pass
 
     def backend(self, device) -> str:
         if "cuda" in device:
@@ -1138,8 +1329,10 @@ class DistributedTestBase(MultiProcessTestCase):
     def create_pg(self, device, world_size=None):
         if world_size is None:
             world_size = self.world_size
+        store = None
         num_visible_devices = torch.get_device_module(device).device_count()
-        store = torch.distributed.FileStore(self.file_name, num_visible_devices)
+        if self.file_name is not None:
+            store = torch.distributed.FileStore(self.file_name, num_visible_devices)
         torch.distributed.init_process_group(
             backend=self.backend(device),
             world_size=world_size,
@@ -1147,7 +1340,7 @@ class DistributedTestBase(MultiProcessTestCase):
             store=store,
         )
         if "nccl" in self.backend(device) or "xccl" in self.backend(device):
-            torch.accelerator.set_device_index(self.rank)
+            torch.accelerator.set_device_index(self.rank % num_visible_devices)
         return torch.distributed.distributed_c10d._get_default_group()
 
     def rank_to_device(self, device):
@@ -1187,6 +1380,8 @@ def run_subtests(
             test_fn(*test_args, **test_kwargs, **subtest_kwargs)
             torch._dynamo.reset()
         c10d.barrier()
+    if TEST_WITH_EXTERNAL_MULTIPROCESSING:
+        c10d.destroy_process_group()
 
 
 @functools.cache
@@ -1576,7 +1771,8 @@ def _dynamo_dist_per_rank_init(
             )
         else:
             backend = c10d.distributed_c10d.Backend.default_device_backend_map.get(
-                torch.accelerator.current_accelerator().type)
+                torch.accelerator.current_accelerator().type
+            )
             c10d.init_process_group(backend=backend, rank=rank, world_size=world_size)
     torch._dynamo.reset()
     torch._dynamo.utils.counters.clear()

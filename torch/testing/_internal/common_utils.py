@@ -277,6 +277,13 @@ OPINFO_SAMPLE_INPUT_INDEX: Optional[int] = TestEnvironment.def_setting(
     parse_fn=lambda val: None if val is None else int(val),
 )
 
+TEST_WITH_EXTERNAL_MULTIPROCESSING: bool = TestEnvironment.def_flag(
+    "TEST_WITH_EXTERNAL_MULTIPROCESSING",
+    env_var="PYTORCH_TEST_EXTERNAL_MULTIPROCESSING",
+    default=False,
+    implied_by_fn=lambda: os.environ.get("PYTORCH_TEST_EXTERNAL_MULTIPROCESSING", "0") == "1",
+)
+
 DEFAULT_DISABLED_TESTS_FILE = '.pytorch-disabled-tests.json'
 DEFAULT_SLOW_TESTS_FILE = 'slow_tests.json'
 

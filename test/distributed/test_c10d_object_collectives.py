@@ -19,6 +19,7 @@ from torch.testing._internal.common_utils import (
     TEST_CUDA,
     TEST_HPU,
     TEST_WITH_DEV_DBG_ASAN,
+    TEST_WITH_EXTERNAL_MULTIPROCESSING,
     TEST_XPU,
 )
 
@@ -52,7 +53,11 @@ def with_comms(func=None):
 
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-        if DEVICE != "cpu" and device_count < self.world_size:
+        if (
+            DEVICE != "cpu"
+            and device_count < self.world_size
+            and not TEST_WITH_EXTERNAL_MULTIPROCESSING
+        ):
             sys.exit(TEST_SKIPS[f"multi-gpu-{self.world_size}"].exit_code)
 
         kwargs["device"] = DEVICE
@@ -163,6 +168,8 @@ class TestObjectCollectives(DistributedTestBase):
 
 
 devices = ("cpu", "cuda", "hpu", "xpu")
-instantiate_device_type_tests(TestObjectCollectives, globals(), only_for=devices, allow_xpu=True)
+instantiate_device_type_tests(
+    TestObjectCollectives, globals(), only_for=devices, allow_xpu=True
+)
 if __name__ == "__main__":
     run_tests()
