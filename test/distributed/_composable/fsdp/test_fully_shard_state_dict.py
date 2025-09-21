@@ -142,7 +142,7 @@ class TestFullyShardStateDictMultiProcess(FSDPTest):
             )
         else:
             model = model.cpu()
-            model = model.cuda()
+            model = model.to(device_type)
             self.assertTrue(
                 sd["weight"]._local_tensor.untyped_storage().data_ptr()
                 != model.weight._local_tensor.untyped_storage().data_ptr()
