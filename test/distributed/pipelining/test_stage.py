@@ -2,7 +2,6 @@
 # Owner(s): ["oncall: distributed"]
 
 import os
-import unittest
 from model_registry import ExampleCode, ModelWithKwargs, MultiMLP
 
 import torch
@@ -25,7 +24,7 @@ from torch.testing._internal.common_utils import (
     run_tests,
     skip_but_pass_in_sandcastle_if,
     TEST_MULTIGPU,
-    TEST_XPU,
+    skipIfXpu,
 )
 from torch.utils._pytree import tree_map_only
 
@@ -209,11 +208,11 @@ class StageTest(MultiProcContinuousTest):
             ref_out = full_mod(x)
             torch.testing.assert_close(out, ref_out)
 
+    @skipIfXpu #https://github.com/intel/torch-xpu-ops/issues/2079
     @requires_accelerator_dist_backend(["nccl", "xccl"])
     @skip_but_pass_in_sandcastle_if(
         not TEST_MULTIACCELERATOR, f"{backend} test requires 2+ GPUs"
     )
-    @unittest.skipIf(TEST_XPU, "https://github.com/intel/torch-xpu-ops/issues/2079")
     def test_custom_dw_with_fb_schedule(self):
         """Tests that separate weight grad function 'dw_runner' gets run under a schedule that's only aware of F/B."""
         full_mod = MultiMLP(d_hid, n_layers=self.world_size)
