@@ -25,6 +25,7 @@ from torch.testing._internal.common_utils import (
     run_tests,
     skip_but_pass_in_sandcastle_if,
     TEST_MULTIGPU,
+    skipIfXpu,
 )
 from torch.utils._pytree import tree_map_only
 
@@ -32,9 +33,6 @@ from torch.utils._pytree import tree_map_only
 d_hid = 512
 batch_size = 256
 chunks = 4
-device = torch.accelerator.current_accelerator()
-backend = dist.get_default_backend_for_device(device) if device is not None else "None"
-
 device_type = acc.type if (acc := torch.accelerator.current_accelerator()) else "cpu"
 backend = dist.get_default_backend_for_device(device_type)
 TEST_MULTIACCELERATOR = torch.accelerator.device_count() >= 2
@@ -215,6 +213,7 @@ class StageTest(MultiProcContinuousTest):
     @skip_but_pass_in_sandcastle_if(
         not TEST_MULTIACCELERATOR, f"{backend} test requires 2+ GPUs"
     )
+    @skipIfXpu #"https://github.com/intel/torch-xpu-ops/issues/2079"
     def test_custom_dw_with_fb_schedule(self):
         """Tests that separate weight grad function 'dw_runner' gets run under a schedule that's only aware of F/B."""
         full_mod = MultiMLP(d_hid, n_layers=self.world_size)
