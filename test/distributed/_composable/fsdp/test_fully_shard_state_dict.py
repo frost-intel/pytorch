@@ -149,7 +149,7 @@ class TestFullyShardStateDictMultiProcess(FSDPTest):
             )
 
         torch.manual_seed(42 + self.rank)
-        inp = torch.rand(mlp_dim, mlp_dim, device="cuda")
+        inp = torch.rand(mlp_dim, mlp_dim, device=device_type)
         for _ in range(5):
             optim.zero_grad()
             loss = model(inp).sum()
