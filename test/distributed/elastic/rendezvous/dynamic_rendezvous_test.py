@@ -18,6 +18,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Callable, cast, Optional
 from unittest import TestCase
 from unittest.mock import call, MagicMock, Mock, patch, PropertyMock
+from torch.testing._internal.common_utils import run_tests
 
 import torch.distributed as dist
 from torch.distributed import HashStore, Store
@@ -1925,3 +1926,7 @@ class _InMemoryRendezvousBackend(RendezvousBackend):
 
             self._state = state
             self._token = self._token + 1 if self._token is not None else 0
+
+if __name__ == "__main__":
+    run_tests()
+
