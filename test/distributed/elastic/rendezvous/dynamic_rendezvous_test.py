@@ -19,6 +19,7 @@ from typing import Callable, cast, Optional
 from unittest import TestCase
 from unittest.mock import call, MagicMock, Mock, patch, PropertyMock
 
+import torch
 import torch.distributed as dist
 from torch.distributed import HashStore, Store
 from torch.distributed.elastic.rendezvous import (
@@ -54,7 +55,9 @@ from torch.distributed.elastic.rendezvous.dynamic_rendezvous import (
 
 TEST_PORT = 54321
 TEST_ADDR = "host"
-
+device_type = (
+    acc.type if (acc := torch.accelerator.current_accelerator(True)) else "cpu"
+)
 
 class CustomAssertMixin:
     assertDictEqual: Callable
@@ -253,6 +256,8 @@ class BackendRendezvousStateHolderTest(TestCase, CustomAssertMixin):
 
         mock_datetime = self._datetime_patch.start()
         mock_datetime.utcnow.return_value = self._now
+        if device_type == "xpu":
+            mock_datetime.now.return_value = self._now
 
     def tearDown(self) -> None:
         self._datetime_patch.stop()
@@ -566,6 +571,8 @@ class DistributedRendezvousOpExecutorTest(TestCase, CustomAssertMixin):
 
         mock_datetime = self._datetime_patch.start()
         mock_datetime.utcnow.return_value = self._now
+        if device_type == "xpu":
+            mock_datetime.now.return_value = self._now
 
     def tearDown(self) -> None:
         self._datetime_patch.stop()
@@ -879,6 +886,8 @@ class AbstractTestRendezvousOp(ABC):
 
         mock_datetime = self._datetime_patch.start()
         mock_datetime.utcnow.return_value = self._now
+        if device_type == "xpu":
+            mock_datetime.now.return_value = self._now
 
         self._time_patch = patch(
             "torch.distributed.elastic.rendezvous.dynamic_rendezvous.time"
