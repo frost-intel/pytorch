@@ -1421,6 +1421,8 @@ class DynamicRendezvousHandlerTest(TestCase):
         now = datetime(2000, 1, 1, hour=0, minute=0)
 
         mock_datetime.utcnow.return_value = now
+        if device_type == "xpu":
+            mock_datetime.now.return_value = now
 
         self._state.last_heartbeats[self._node] = now - (self._keep_alive_interval * 2)
 
