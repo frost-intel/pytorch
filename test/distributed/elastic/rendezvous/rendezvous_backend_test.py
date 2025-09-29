@@ -14,7 +14,6 @@ from torch.distributed.elastic.rendezvous.dynamic_rendezvous import (
     RendezvousBackend,
     Token,
 )
-from torch.testing._internal.common_utils import run_tests
 
 
 class RendezvousBackendTestMixin(ABC):
@@ -108,6 +107,3 @@ class RendezvousBackendTestMixin(ABC):
         self.assertEqual(state1, state2)
         self.assertEqual(token1, token2)
         self.assertFalse(has_set)
-
-if __name__ == "__main__":
-    run_tests()

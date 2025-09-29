@@ -13,7 +13,6 @@ from torch.distributed.elastic.rendezvous.static_tcp_rendezvous import (
     create_rdzv_handler,
 )
 from torch.distributed.elastic.utils import get_socket_with_port
-from torch.testing._internal.common_utils import run_tests
 
 
 class StaticTCPRendezvousTest(unittest.TestCase):
@@ -101,6 +100,3 @@ class StaticTCPRendezvousTest(unittest.TestCase):
         self.assertIsNotNone(rdzv_info.store)
         self.assertEqual(0, rdzv_info.rank)
         self.assertEqual(1, rdzv_info.world_size)
-
-if __name__ == "__main__":
-    run_tests()
