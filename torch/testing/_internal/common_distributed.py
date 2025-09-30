@@ -1130,7 +1130,7 @@ class ExternalMultiProcessTestCase(TestCase):
 
         Args:
             method_name (str, optional): The name of the test method to run. Defaults to "runTest".
-            methodName (str, optional): Alternative way to specify the test method name. If provided and not "runTest", it overrides `method_name`.
+            methodName (str, optional): Alternative way to specify the test method name.
 
         Notes:
             - If `methodName` is not "runTest", it takes precedence over `method_name`.
@@ -1147,7 +1147,6 @@ class ExternalMultiProcessTestCase(TestCase):
         self.rank = ExternalMultiProcessTestCase._get_env_rank(local_rank=False)
         self.local_rank = ExternalMultiProcessTestCase._get_env_rank(local_rank=True)
         self.file_name = None
-
 
     @staticmethod
     def _get_env_rank(local_rank: bool) -> int:
@@ -1191,7 +1190,6 @@ class ExternalMultiProcessTestCase(TestCase):
             f"Could not determine {rank_type} rank from environment variables: {', '.join(rank_env_vars)}"
         )
 
-
     @staticmethod
     def _get_env_world_size() -> int:
         """
@@ -1207,7 +1205,7 @@ class ExternalMultiProcessTestCase(TestCase):
         value = os.environ.get("WORLD_SIZE")
         if value is None:
             raise RuntimeError(
-                "Required environment variable 'WORLD_SIZE' is not defined. This variable is necessary for running distributed tests."
+                "Required environment variable 'WORLD_SIZE' is not defined which is necessary for running distributed tests."
             )
         value = value.strip()
         if value == "":
@@ -1218,7 +1216,6 @@ class ExternalMultiProcessTestCase(TestCase):
             raise ValueError(
                 f"Environment variable 'WORLD_SIZE' is not an integer, got '{value}'"
             ) from err
-
 
     @property
     def world_size(self) -> int:
@@ -1232,7 +1229,6 @@ class ExternalMultiProcessTestCase(TestCase):
             int: The number of processes in the distributed test environment.
         """
         return ExternalMultiProcessTestCase._get_env_world_size()
-
 
     def run_test(self, test_name: str) -> None:
         return
