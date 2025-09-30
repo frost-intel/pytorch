@@ -1168,7 +1168,7 @@ class FSDPTest(MultiProcessTestCase):
     @property
     def world_size(self):
         if TEST_WITH_EXTERNAL_MULTIPROCESSING:
-            return MultiProcessTestCase._get_world_size() or DEVICE_COUNT
+            return MultiProcessTestCase._get_env_world_size()
         return DEVICE_COUNT
 
     @property

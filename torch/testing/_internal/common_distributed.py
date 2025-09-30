@@ -1143,93 +1143,96 @@ class ExternalMultiProcessTestCase(TestCase):
         self.local_rank = 0
 
     def setUp(self) -> None:
-        """
-        Set up the test case environment by initializing process rank and local rank.
-
-        This method overrides the parent setUp method to:
-        - Set `self.rank` to the global rank of the current process, falling back to an existing `rank` attribute or 0 if unavailable.
-        - Set `self.local_rank` to the local rank of the current process, falling back to an existing `local_rank` attribute or 0 if unavailable.
-        - Initialize `self.file_name` to None.
-        """
         super().setUp()
-        self.rank = ExternalMultiProcessTestCase._get_rank(local_rank=False) or getattr(
-            self, "rank", 0
-        )
-        self.local_rank = ExternalMultiProcessTestCase._get_rank(
-            local_rank=True
-        ) or getattr(self, "local_rank", 0)
+        self.rank = ExternalMultiProcessTestCase._get_env_rank(local_rank=False)
+        self.local_rank = ExternalMultiProcessTestCase._get_env_rank(local_rank=True)
         self.file_name = None
 
+
     @staticmethod
-    def _get_rank(local_rank: bool) -> Optional[int]:
-        """
-        Retrieves the (global or local) rank of the current process from environment variables.
+    def _get_env_rank(local_rank: bool) -> int:
+        """Return the local or global process rank derived from environment variables.
 
         Args:
-            local_rank (bool): If True, retrieves the local rank; otherwise, retrieves the global rank.
+            local_rank (bool): If True, inspect LOCAL_RANK environment variables;
+                otherwise inspect global RANK environment variables.
 
         Returns:
-            Optional[int]: The rank as an integer if found otherwise None.
+            int: The parsed integer rank.
+
+        Raises:
+            ValueError: If an environment variable is set but empty or cannot be parsed as an integer.
+            RuntimeError: If no suitable environment variable is found for the requested rank type.
         """
-        if local_rank:
-            rank_type_str = "local rank"
-            rank_env_vars = ExternalMultiProcessTestCase.LOCAL_RANK_ENV_VARS
-        else:
-            rank_type_str = "(global) rank"
-            rank_env_vars = ExternalMultiProcessTestCase.RANK_ENV_VARS
-        for env in rank_env_vars:
-            if env in os.environ:
-                try:
-                    return int(os.environ[env])
-                except ValueError:
-                    logger.warning(
-                        f"Environment variable {env} is set but is not an integer: {os.environ[env]}"
-                    )
-        logger.warning(
-            f"Unable to retrieve the {rank_type_str} ID from the environment variables: {', '.join(rank_env_vars)}"
+        rank_env_vars = (
+            ExternalMultiProcessTestCase.LOCAL_RANK_ENV_VARS
+            if local_rank
+            else ExternalMultiProcessTestCase.RANK_ENV_VARS
         )
-        return None
+        last_error: Optional[Exception] = None
+        for env in rank_env_vars:
+            value = os.environ.get(env)
+            if value is None:
+                continue
+            value = value.strip()
+            if value == "":
+                last_error = ValueError(f"Environment variable {env} is empty")
+                continue
+            try:
+                return int(value)
+            except ValueError:
+                last_error = ValueError(
+                    f"Environment variable {env} is set but not an integer: {value}"
+                )
+        if last_error is not None:
+            raise last_error
+        rank_type = "local" if local_rank else "global"
+        raise RuntimeError(
+            f"Could not determine {rank_type} rank from environment variables: {', '.join(rank_env_vars)}"
+        )
+
 
     @staticmethod
-    def _get_world_size() -> Optional[int]:
+    def _get_env_world_size() -> int:
         """
-        Returns the world size which corresponds to the total number of processes for distributed tests.
-
-        This static method checks if the "WORLD_SIZE" environment variable is set.
-        If set, the method attempts to convert its value to an integer and return it.
-        If the value cannot be converted to an integer, a warning is logged and None is returned.
-        If the "WORLD_SIZE" environment variable is not set, then the method returns None.
+        Retrieves the world size, i.e. total number of processes, defined by the ``WORLD_SIZE`` environment variable.
 
         Returns:
-            Optional[int]: The world size as an integer otherwise None.
+            int: The total number of processes, i.e. the parsed integer value of ``WORLD_SIZE``.
+
+        Raises:
+            RuntimeError: If ``WORLD_SIZE`` is not set.
+            ValueError: If ``WORLD_SIZE`` is empty or cannot be parsed as an integer.
         """
-        if "WORLD_SIZE" in os.environ:
-            try:
-                return int(os.environ["WORLD_SIZE"])
-            except ValueError:
-                logger.warning(
-                    f"Environment variable WORLD_SIZE is set but is not an integer: {os.environ['WORLD_SIZE']}"
-                )
-        return None
+        value = os.environ.get("WORLD_SIZE")
+        if value is None:
+            raise RuntimeError(
+                "Required environment variable 'WORLD_SIZE' is not defined. This variable is necessary for running distributed tests."
+            )
+        value = value.strip()
+        if value == "":
+            raise ValueError("Environment variable 'WORLD_SIZE' is empty")
+        try:
+            return int(value)
+        except ValueError as err:
+            raise ValueError(
+                f"Environment variable 'WORLD_SIZE' is not an integer, got '{value}'"
+            ) from err
+
 
     @property
     def world_size(self) -> int:
         """
-        Returns the world size (number of processes) for distributed tests.
+        Returns the total number of processes participating in the distributed test.
 
-        This method tries to retrieve the world size by calling the class method `_get_world_size()`.
-        If None is returned, it logs a warning and returns a default value (`DEFAULT_WORLD_SIZE`).
+        This property retrieves the world size by calling the class method
+        `_get_world_size()` from `ExternalMultiProcessTestCase`.
 
         Returns:
-            int: The total number of processes participating in the distributed test.
+            int: The number of processes in the distributed test environment.
         """
-        world_size = ExternalMultiProcessTestCase._get_world_size()
-        if world_size is None:
-            logger.warning(
-                f'"WORLD_SIZE" not set in environment, falling back to DEFAULT_WORLD_SIZE={DEFAULT_WORLD_SIZE}'
-            )
-            return DEFAULT_WORLD_SIZE
-        return world_size
+        return ExternalMultiProcessTestCase._get_env_world_size()
+
 
     def run_test(self, test_name: str) -> None:
         return
