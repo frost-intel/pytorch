@@ -41,6 +41,7 @@ from torch.testing._internal.common_utils import (
     TEST_CUDA,
     TEST_HPU,
     TEST_PRIVATEUSE1,
+    TEST_WITH_EXTERNAL_MULTIPROCESSING,
     TEST_XPU,
 )
 from torch.utils._pytree import tree_flatten, tree_unflatten, TreeSpec
@@ -372,6 +373,13 @@ class DTensorTestBase(MultiProcessTestCase):
         backend = dist.get_default_backend_for_device(DEVICE_TYPE)
         return backend
 
+    @property
+    def init_method(self):
+        if TEST_WITH_EXTERNAL_MULTIPROCESSING:
+            return None
+        return f"file://{self.file_name}"
+
+
     def build_device_mesh(self) -> DeviceMesh:
         return init_device_mesh(self.device_type, (self.world_size,))
 
@@ -413,7 +421,7 @@ class DTensorTestBase(MultiProcessTestCase):
             backend=backend,
             world_size=self.world_size,
             rank=self.rank,  # pyre-ignore[16]
-            init_method=f"file://{self.file_name}",  # pyre-ignore[16]
+            init_method=self.init_method,  # pyre-ignore[16]
             device_id=device_id,
         )
 
@@ -443,7 +451,10 @@ class DTensorTestBase(MultiProcessTestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        self._spawn_processes()
+        if TEST_WITH_EXTERNAL_MULTIPROCESSING:
+            self._run_external_multiprocessing()
+        else:
+            self._spawn_processes()
 
     def _test_op_on_dtensor(self, op_call, *args, **kwargs) -> None:
         """
