@@ -70,10 +70,6 @@ class RingAttentionTest(DTensorTestBase):
 
     @skip_if_lt_x_gpu(2)
     @skipIfRocm  # Missing _c10d_functional_autograd::all_to_all_single
-    @unittest.skipIf(
-        not PLATFORM_SUPPORTS_FUSED_ATTENTION,
-        "Does not support flash nor efficient attention",
-    )
     @with_comms
     def test_ring_attention_sdpa(self) -> None:
         self.run_subtests(
