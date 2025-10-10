@@ -48,7 +48,7 @@ class TestTpCheckpoint(DTensorTestBase):
         device_type = torch.accelerator.current_accelerator().type
         device = torch.device(f"{device_type}:{self.rank}")
         # create model and move it to GPU with id rank
-        model = MLPModule(self.device_type).to(device)
+        model = MLPModule(self.device_type).to(self.rank)
         # Parallelize the module based on the given Parallel Style.
         parallelize_plan = {
             "net1": ColwiseParallel(),
@@ -66,7 +66,7 @@ class TestTpCheckpoint(DTensorTestBase):
 
         # Update the parameters so model.state_dict() will be different from original_state_dict.
         torch.manual_seed(0)
-        inp = torch.rand(20, 10).to(device)
+        inp = torch.rand(20, 10).to(self.rank)
         output = model(inp)
         output.sum().backward()
         optimizer.step()
@@ -96,7 +96,7 @@ class TestTpCheckpoint(DTensorTestBase):
         device_type = torch.accelerator.current_accelerator().type
         device = torch.device(f"{device_type}:{self.rank}")
         # create model and move it to GPU with id rank
-        model = UnevenShardedModel(self.device_type).to(device)
+        model = UnevenShardedModel(self.device_type).to(self.rank)
         # Parallelize the module based on the given Parallel Style.
         parallelize_plan = {
             "net1": ColwiseParallel(),

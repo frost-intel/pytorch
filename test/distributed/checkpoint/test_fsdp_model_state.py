@@ -21,10 +21,8 @@ from torch.testing._internal.distributed.checkpoint_utils import with_temp_dir
 class FsdpModelStateCheckpoint(DTensorTestBase):
     @property
     def backend(self):
-        DEVICE_TYPE = torch.accelerator.current_accelerator().type
-        backend = torch.distributed.distributed_c10d.Backend.default_device_backend_map.get(
-            torch.accelerator.current_accelerator().type)
-        return f"cpu:gloo,{DEVICE_TYPE}:{backend}"
+        curr_backend = dist.get_default_backend_for_device(self.device_type)
+        return f"cpu:gloo,{self.device_type}:{curr_backend}"
 
     def _test_fsdp_model_state(self, process_group) -> None:
         CHECKPOINT_DIR = self.temp_dir
@@ -70,8 +68,8 @@ class FsdpModelStateCheckpoint(DTensorTestBase):
                 self.assertEqual(model.weight, model_2.weight)
                 self.assertEqual(model.bias, model_2.bias)
 
-    @with_comms
     @skip_if_lt_x_gpu(2)
+    @with_comms
     @with_temp_dir
     def test_fsdp_model_state_no_resharding(self):
         self._test_fsdp_model_state(process_group=None)
@@ -91,8 +89,8 @@ class FsdpModelStateCheckpoint(DTensorTestBase):
 
         return my_fsdp
 
-    @with_comms
     @skip_if_lt_x_gpu(4)
+    @with_comms
     @with_temp_dir
     def test_fsdp_model_state_with_resharding(self):
         self._test_fsdp_model_state(process_group=self._create_new_dist_group())

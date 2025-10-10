@@ -32,12 +32,18 @@ from torch.distributed.checkpoint.planner import (
 )
 from torch.distributed.checkpoint.storage import WriteResult
 from torch.futures import Future
-from torch.testing._internal.common_distributed import requires_nccl_or, skip_if_lt_x_gpu
+from torch.testing._internal.common_distributed import (
+    requires_accelerator_dist_backend,
+    skip_if_lt_x_gpu,
+)
 from torch.testing._internal.common_utils import run_tests, TEST_WITH_DEV_DBG_ASAN
 from torch.testing._internal.distributed._shard.sharded_tensor import (
     ShardedTensorTestBase,
     with_comms,
 )
+
+
+device_type = acc.type if (acc := torch.accelerator.current_accelerator()) else "cpu"
 
 
 if TEST_WITH_DEV_DBG_ASAN:
@@ -76,7 +82,7 @@ class TestDistributedCheckpointing(ShardedTensorTestBase):
 
     @with_comms(init_rpc=False)
     @skip_if_lt_x_gpu(2)
-    @requires_nccl_or(['xccl'])
+    @requires_accelerator_dist_backend()
     def test_tensor_metadata_with_missing_rank_spec(self) -> None:
         device_type = torch.accelerator.current_accelerator().type
         spec = ChunkShardingSpec(
@@ -94,9 +100,8 @@ class TestDistributedCheckpointing(ShardedTensorTestBase):
 
     @with_comms(init_rpc=False)
     @skip_if_lt_x_gpu(2)
-    @requires_nccl_or(['xccl'])
+    @requires_accelerator_dist_backend()
     def test_default_metadata(self) -> None:
-        device_type = torch.accelerator.current_accelerator().type
         device = f"{device_type}:{dist.get_rank()}"
         spec = ChunkShardingSpec(
             dim=0,
@@ -237,12 +242,14 @@ class TestDistributedFailure(ShardedTensorTestBase):
         device_type = torch.accelerator.current_accelerator().type
         return ChunkShardingSpec(
             dim=0,
-            placements=[f"rank:{r}/{device_type}:{r}" for r in range(dist.get_world_size())],
+            placements=[
+                f"rank:{r}/{device_type}:{r}" for r in range(dist.get_world_size())
+            ],
         )
 
     @with_comms(init_rpc=False)
     @skip_if_lt_x_gpu(2)
-    @requires_nccl_or(['xccl'])
+    @requires_accelerator_dist_backend()
     def test_dummy_writer_works(self) -> None:
         state_dict = {
             "sharded": sharded_tensor.rand(self.get_spec(), 20, 20),
@@ -254,7 +261,7 @@ class TestDistributedFailure(ShardedTensorTestBase):
 
     @with_comms(init_rpc=False)
     @skip_if_lt_x_gpu(2)
-    @requires_nccl_or(['xccl'])
+    @requires_accelerator_dist_backend()
     def test_dummy_reader_works(self) -> None:
         state_dict = {
             "sharded": sharded_tensor.rand(self.get_spec(), 20, 20),
@@ -317,7 +324,7 @@ class TestDistributedFailure(ShardedTensorTestBase):
 
     @with_comms(init_rpc=False)
     @skip_if_lt_x_gpu(4)
-    @requires_nccl_or(['xccl'])
+    @requires_accelerator_dist_backend()
     def test_save_error_handling(self) -> None:
         state_dict = {
             "sharded": sharded_tensor.rand(self.get_spec(), 20, 20),
@@ -351,7 +358,7 @@ class TestDistributedFailure(ShardedTensorTestBase):
 
     @with_comms(init_rpc=False)
     @skip_if_lt_x_gpu(4)
-    @requires_nccl_or(['xccl'])
+    @requires_accelerator_dist_backend()
     def test_load_error_handling(self) -> None:
         state_dict = {
             "sharded": sharded_tensor.rand(self.get_spec(), 20, 20),

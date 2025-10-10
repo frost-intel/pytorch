@@ -241,8 +241,11 @@ def _check_input_constraints_pre_hook(self, args, kwargs):
         _check_inputs_match(args, kwargs, self._in_spec)
         return
 
-    # NOTE: this call is Dynamo disabled, as it used to be
-    _check_input_constraints_for_module(self, args, kwargs)
+    # NOTE: for some reason, Dynamo is tracing into this, we should see why and
+    # put compile at the right place. Until then, we can skip the input
+    # constraint checks.
+    if not torch.compiler.is_dynamo_compiling():
+        _check_input_constraints_for_module(self, args, kwargs)
 
 
 def _unlift_inputs_as_getattr(
@@ -323,8 +326,7 @@ def _insert_copy_for_mutations(
             return_nodes_to_copy[return_node] = copy_node
 
     output_args = tuple(
-        return_nodes_to_copy[node] if node in return_nodes_to_copy else node
-        for node in user_output_nodes
+        return_nodes_to_copy.get(node, node) for node in user_output_nodes
     )
     with gm.graph.inserting_before(output_node):
         # Only return user outputs

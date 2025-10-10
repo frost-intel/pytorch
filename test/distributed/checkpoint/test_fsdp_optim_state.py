@@ -1,6 +1,7 @@
 # Owner(s): ["oncall: distributed"]
 
 import torch
+import torch.distributed as dist
 import torch.distributed.checkpoint as dcp
 import torch.nn as nn
 from torch.distributed._shard.sharded_tensor.api import ShardedTensor
@@ -29,8 +30,9 @@ class FsdpOptimStateCheckpoint(DTensorTestBase):
         device = torch.accelerator.current_accelerator()
 
         class TestDummyModel(torch.nn.Module):
-            def __init__(self) -> None:
+            def __init__(self, device_type) -> None:
                 super().__init__()
+                self.device_type = device_type
                 self.net1 = nn.Sequential(nn.Linear(8, layer1_weight_dim), nn.ReLU())
                 self.net2 = nn.Sequential(
                     nn.Linear(layer1_weight_dim, layer2_weight_dim), nn.ReLU()
@@ -43,19 +45,18 @@ class FsdpOptimStateCheckpoint(DTensorTestBase):
                 return self.net3(self.net2(self.net1(x)))
 
             def get_input(self):
-                return torch.rand(8, 8, device=device)
-        model = TestDummyModel().to(device)
+                return torch.rand(8, 8, device=self.device_type)
+
+        model = TestDummyModel(self.device_type).to(self.device_type)
         return model
 
     @property
     def backend(self):
-        DEVICE_TYPE = torch.accelerator.current_accelerator().type
-        backend = torch.distributed.distributed_c10d.Backend.default_device_backend_map.get(
-            torch.accelerator.current_accelerator().type)
-        return f"cpu:gloo,{DEVICE_TYPE}:{backend}"
+        curr_backend = dist.get_default_backend_for_device(self.device_type)
+        return f"cpu:gloo,{self.device_type}:{curr_backend}"
 
-    @with_comms
     @skip_if_lt_x_gpu(2)
+    @with_comms
     @with_temp_dir
     @parametrize("pass_planner", [True, False])
     def test_load_sharded_optimizer_state_dict(self, pass_planner) -> None:

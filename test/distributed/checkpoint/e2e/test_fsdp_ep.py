@@ -67,8 +67,7 @@ class TestFSDPWithEP(DTensorTestBase, VerifyStateDictMixin):
     @skip_if_lt_x_gpu(8)
     @with_temp_dir
     def test_e2e(self):
-        device = torch.accelerator.current_accelerator()
-        model = TopModel(self.rank).to(device)
+        model = TopModel(self.rank).to(self.device_type)
 
         mesh_fsdp_tp = init_device_mesh(
             self.device_type, (2, 4), mesh_dim_names=("dp", "tp")
