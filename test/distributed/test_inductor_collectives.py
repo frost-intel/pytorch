@@ -1571,12 +1571,12 @@ class TestCollectivesInductor(DynamoDistributedSingleProcTestCase):
             ag_3_out = torch.ops.c10d_functional.wait_tensor(ag_3_out)
             return y, ag_0_out, ag_1_out, ag_2_out, ag_3_out
 
-        x = torch.ones(4, 384, device=device_type, dtype=torch.float32)
-        w = torch.ones(384, 512, device=device_type, dtype=torch.float32)
-        ag_0 = torch.ones(384, 512, device=device_type, dtype=torch.float32)
-        ag_1 = torch.ones(384, 512, device=device_type, dtype=torch.float32)
-        ag_2 = torch.ones(384, 512, device=device_type, dtype=torch.float32)
-        ag_3 = torch.ones(384, 512, device=device_type, dtype=torch.float32)
+        x = torch.ones(4, 384, device=self.device, dtype=torch.float32)
+        w = torch.ones(384, 512, device=self.device, dtype=torch.float32)
+        ag_0 = torch.ones(384, 512, device=self.device, dtype=torch.float32)
+        ag_1 = torch.ones(384, 512, device=self.device, dtype=torch.float32)
+        ag_2 = torch.ones(384, 512, device=self.device, dtype=torch.float32)
+        ag_3 = torch.ones(384, 512, device=self.device, dtype=torch.float32)
         inputs = [x, w, ag_0, ag_1, ag_2, ag_3]
         correct = func(*inputs, **self.get_world_trs())
 
@@ -1696,10 +1696,10 @@ class TestCollectivesInductor(DynamoDistributedSingleProcTestCase):
             return y, rs_0_out.to(torch.float32), rs_1_out.to(torch.float32)
 
         for f in [func, func2]:
-            x = torch.ones(4, 384, device=device_type, dtype=torch.float32)
-            w = torch.ones(384, 512, device=device_type, dtype=torch.float32)
-            rs_0 = torch.ones(384, 512, device=device_type, dtype=torch.float32)
-            rs_1 = torch.ones(384, 256, device=device_type, dtype=torch.float32)
+            x = torch.ones(4, 384, device=self.device, dtype=torch.float32)
+            w = torch.ones(384, 512, device=self.device, dtype=torch.float32)
+            rs_0 = torch.ones(384, 512, device=self.device, dtype=torch.float32)
+            rs_1 = torch.ones(384, 256, device=self.device, dtype=torch.float32)
             inputs = [x, w, rs_0, rs_1]
             f(*inputs, **self.get_world_trs())
 
