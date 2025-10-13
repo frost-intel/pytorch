@@ -25,6 +25,7 @@ from torch.testing._internal.common_utils import (
     MI200_ARCH,
     run_tests,
     TEST_HPU,
+    TEST_XPU,
 )
 
 
