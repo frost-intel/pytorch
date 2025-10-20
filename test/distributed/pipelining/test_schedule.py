@@ -8,6 +8,7 @@ import os
 from model_registry import MultiMLP
 
 import torch
+import torch.distributed as c10d
 from torch._dynamo import OptimizedModule
 from torch.distributed.pipelining import (
     Schedule1F1B,
