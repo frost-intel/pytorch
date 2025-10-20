@@ -979,6 +979,7 @@ class TestDeviceMeshGetItem(DTensorTestBase):
         self.assertEqual(dp_cp_mesh._get_root_mesh(), mesh_4d)
 
     @with_comms
+    @skip_if_lt_x_gpu(8)
     def test_unflatten_mesh_2d(self):
         mesh_shape = (4, 2)
         mesh_dim_names = ("dp", "tp")
@@ -997,6 +998,7 @@ class TestDeviceMeshGetItem(DTensorTestBase):
             self.assertEqual(mesh_2d["dp_shard"].mesh, unflatten_mesh["dp_shard"].mesh)
 
     @with_comms
+    @skip_if_lt_x_gpu(8)
     def test_unflatten_mesh_3d(self):
         # Test unflatten from a dummy world mesh, which is the case we need for Expert Parallelism(EP).
         global_mesh = init_device_mesh(
