@@ -668,10 +668,9 @@ class MultiDimRedistributeTest(DTensorTestBase):
         return min(8, device_count)
 
     @with_comms
-    @skip_if_lt_x_gpu(8)
     def test_multi_dim_mesh(self):
         devices = torch.arange(self.world_size)
-        for mesh_shape in [devices, devices.view(4, 2), devices.view(2, 2, 2)]:
+        for mesh_shape in [devices, devices.view(4, self.world_size // 4), devices.view(2, 2, self.world_size // 4)]:
             mesh_shape = torch.arange(self.world_size).view(-1, 2)
             device_mesh = DeviceMesh(self.device_type, mesh_shape)
             tensor_shape = (16, 24)
@@ -718,9 +717,8 @@ class MultiDimRedistributeTest(DTensorTestBase):
                         self.assertEqual(local_full, expected)
 
     @with_comms
-    @skip_if_lt_x_gpu(8)
     def test_redistribute_shard_dim_multi_dim_mesh(self):
-        mesh = init_device_mesh(self.device_type, (2, 2, 2))
+        mesh = init_device_mesh(self.device_type, (2, 2, self.world_size // 4))
         input_data = torch.randn((8, 8, 8), device=self.device_type)
 
         sharding_src_dst_pairs_3d = [
@@ -759,7 +757,8 @@ class MultiDimRedistributeTest(DTensorTestBase):
 class DistributeWithDeviceOrderTest(DTensorTestBase):
     @property
     def world_size(self) -> int:
-        return 8
+        device_count = torch.accelerator.device_count() if torch.accelerator.is_available() else 8
+        return min(8, device_count)
 
     def _extract_redistribute_trace_from_debug_mode(self, s: str) -> str:
         import re
@@ -857,7 +856,7 @@ class DistributeWithDeviceOrderTest(DTensorTestBase):
     def test_ordered_redistribute(self):
         """Test ordered redistribution with various sharding syntaxes"""
         torch.manual_seed(21)
-        mesh = init_device_mesh(self.device_type, (2, 2, 2))
+        mesh = init_device_mesh(self.device_type, (2, 2, self.world_size // 4))
         input_data = torch.randn((8, 8, 8), device=self.device_type)
         sharding_src_dst_pairs_with_expected_trace = [
             (
@@ -992,9 +991,9 @@ class DistributeWithDeviceOrderTest(DTensorTestBase):
         import math
 
         test_inputs = [
-            {"mesh": init_device_mesh(self.device_type, (2, 2, 2)), "tensor_rank": 2},
-            {"mesh": init_device_mesh(self.device_type, (2, 2, 2)), "tensor_rank": 3},
-            {"mesh": init_device_mesh(self.device_type, (2, 2, 2)), "tensor_rank": 4},
+            {"mesh": init_device_mesh(self.device_type, (2, 2, self.world_size // 4)), "tensor_rank": 2},
+            {"mesh": init_device_mesh(self.device_type, (2, 2, self.world_size // 4)), "tensor_rank": 3},
+            {"mesh": init_device_mesh(self.device_type, (2, 2, self.world_size // 4)), "tensor_rank": 4},
         ]
         for test_input in test_inputs:
             all_combinations = []
@@ -1029,7 +1028,7 @@ class DistributeWithDeviceOrderTest(DTensorTestBase):
     def test_ordered_distribute_all_combination(self):
         """Exhaustively test all possible sharding combinations and verify correctness"""
         torch.manual_seed(21)
-        mesh = init_device_mesh(self.device_type, (2, 2, 2))
+        mesh = init_device_mesh(self.device_type, (2, 2, self.world_size // 4))
         input_tensor_shape = [
             # even sharding
             (16, 8),
@@ -1079,7 +1078,7 @@ class DistributeWithDeviceOrderTest(DTensorTestBase):
         """Test mixing Partial in the original placements and do redistribute."""
         # This test takes 226s to complete on 8XA100...
         torch.manual_seed(21)
-        mesh = init_device_mesh(self.device_type, (2, 2, 2))
+        mesh = init_device_mesh(self.device_type, (2, 2, self.world_size // 4))
         input_tensor_shape = [
             # even sharding
             (16, 8),
@@ -1150,7 +1149,7 @@ class DistributeWithDeviceOrderTest(DTensorTestBase):
 
     @with_comms
     def test_shard_order_same_data_as_strided_shard(self):
-        device_mesh = init_device_mesh(self.device_type, (4, 2))
+        device_mesh = init_device_mesh(self.device_type, (4, self.world_size // 4))
         x = torch.randn(8, 4, device=self.device_type)
         # specify right-to-left order use _StridedShard
         strided_placement = [_StridedShard(-2, split_factor=2), Shard(-2)]
