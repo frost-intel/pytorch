@@ -20,6 +20,7 @@ from torch.distributed.tensor._collective_utils import shard_dim_alltoall
 from torch.distributed.tensor._dtensor_spec import ShardOrderEntry
 from torch.distributed.tensor._redistribute import redistribute_local_tensor
 from torch.distributed.tensor.debug import CommDebugMode
+from torch.testing._internal.common_distributed import skip_if_lt_x_gpu
 from torch.distributed.tensor.placement_types import _StridedShard
 from torch.testing._internal.common_utils import (
     instantiate_parametrized_tests,
@@ -717,8 +718,9 @@ class MultiDimRedistributeTest(DTensorTestBase):
                         self.assertEqual(local_full, expected)
 
     @with_comms
+    @skip_if_lt_x_gpu(8)
     def test_redistribute_shard_dim_multi_dim_mesh(self):
-        mesh = init_device_mesh(self.device_type, (2, 2, self.world_size // 4))
+        mesh = init_device_mesh(self.device_type, (2, 2, 2))
         input_data = torch.randn((8, 8, 8), device=self.device_type)
 
         sharding_src_dst_pairs_3d = [
@@ -1074,11 +1076,12 @@ class DistributeWithDeviceOrderTest(DTensorTestBase):
                     prev_sharded_dt = sharded_dt
 
     @with_comms
+    @skip_if_lt_x_gpu(8)
     def test_ordered_redistribute_with_partial(self):
         """Test mixing Partial in the original placements and do redistribute."""
         # This test takes 226s to complete on 8XA100...
         torch.manual_seed(21)
-        mesh = init_device_mesh(self.device_type, (2, 2, self.world_size // 4))
+        mesh = init_device_mesh(self.device_type, (2, 2, 2))
         input_tensor_shape = [
             # even sharding
             (16, 8),
@@ -1148,8 +1151,9 @@ class DistributeWithDeviceOrderTest(DTensorTestBase):
         )
 
     @with_comms
+    @skip_if_lt_x_gpu(8)
     def test_shard_order_same_data_as_strided_shard(self):
-        device_mesh = init_device_mesh(self.device_type, (4, self.world_size // 4))
+        device_mesh = init_device_mesh(self.device_type, (4, 2))
         x = torch.randn(8, 4, device=self.device_type)
         # specify right-to-left order use _StridedShard
         strided_placement = [_StridedShard(-2, split_factor=2), Shard(-2)]
