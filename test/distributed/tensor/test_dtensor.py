@@ -1147,6 +1147,7 @@ class TestDTensorSpec(DTensorTestBase):
         )
 
     @with_comms
+    @skip_if_lt_x_gpu(8)
     def test_dtensor_spec_with_invalid_shard_order(self):
         mesh_shape = (2, 2, self.world_size // 4)
         mesh = init_device_mesh(self.device_type, mesh_shape)
@@ -1196,6 +1197,7 @@ class TestDTensorSpec(DTensorTestBase):
             )
 
     @with_comms
+    @skip_if_lt_x_gpu(8)
     def test_dtensor_spec_update(self):
         mesh_shape = (2, 2, self.world_size // 4)
         mesh = init_device_mesh(self.device_type, mesh_shape)
@@ -1255,6 +1257,7 @@ class TestDTensorSpec(DTensorTestBase):
         self.assertEqual(tensor_global._spec.shard_order, ())
 
     @with_comms
+    @skip_if_lt_x_gpu(8)
     def test_default_shard_order(self):
         mesh_shape = (2, 2, self.world_size // 4)
         mesh = init_device_mesh(self.device_type, mesh_shape)
