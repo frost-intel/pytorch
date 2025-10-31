@@ -21,7 +21,6 @@ from torch.testing._internal.common_cuda import (
     SM80OrLater,
     SM90OrLater,
     SM100OrLater,
-    xfailIfSM120OrLater,
     _get_torch_cuda_version,
 )
 from torch.testing._internal.common_device_type import (
@@ -49,6 +48,8 @@ from torch.testing._internal.common_utils import (
     TestCase,
     decorateIf,
 )
+
+from torch.testing._internal.inductor_utils import IS_BIG_GPU
 
 from torch._inductor.test_case import TestCase as InductorTestCase
 
@@ -329,7 +330,6 @@ class TestMatmulCuda(InductorTestCase):
                 self.assertEqual(agrad, a.grad)
                 self.assertEqual(bgrad, b.grad)
 
-    @xfailIfSM120OrLater
     @unittest.skipIf(not SM80OrLater, "Grouped gemm supported only on SM80 or greater")
     @parametrize("strided", [False, True])
     @parametrize("a_row_major", [False, True])
@@ -367,7 +367,6 @@ class TestMatmulCuda(InductorTestCase):
             start = offs_cpu[i]
         self.grouped_mm_helper(alist, blist, gO, agradlist, bgradlist, out)
 
-    @xfailIfSM120OrLater
     @unittest.skipIf(not SM80OrLater, "Grouped gemm supported only on SM80 or greater")
     @parametrize("strided", [False, True])
     @parametrize("a_row_major", [False, True])
@@ -423,7 +422,6 @@ class TestMatmulCuda(InductorTestCase):
             self.grouped_mm_helper(alist, b, gOlist, agradlist, bgradlist, outlist)
 
 
-    @xfailIfSM120OrLater
     @unittest.skipIf(not SM80OrLater, "Grouped gemm supported only on SM80 or greater")
     @parametrize("strided", [False, True])
     @parametrize("a_row_major", [False, True])
@@ -457,7 +455,6 @@ class TestMatmulCuda(InductorTestCase):
         out.backward(gO)
         self.grouped_mm_helper(a, b, gO, a.grad, b.grad, out)
 
-    @xfailIfSM120OrLater
     @unittest.skipIf(not SM80OrLater, "Grouped gemm supported only on SM80 or greater")
     @parametrize("strided", [False, True])
     @parametrize("a_row_major", [False, True])
@@ -624,8 +621,12 @@ class TestMatmulCuda(InductorTestCase):
             raise AssertionError(f"Invalid op: {op}")
 
         C_ref = f_ref(A, B.transpose(-2, -1), offs=offs)
-        C = f(A, B.transpose(-2, -1), offs=offs)
-        torch.testing.assert_close(C, C_ref)
+        if not IS_BIG_GPU and max_autotune:
+            with self.assertRaisesRegex(torch._inductor.exc.InductorError, "NoValidChoicesError"):
+                C = f(A, B.transpose(-2, -1), offs=offs)
+        else:
+            C = f(A, B.transpose(-2, -1), offs=offs)
+            self.assertEqual(C, C_ref)
 
 
     @onlyCUDA

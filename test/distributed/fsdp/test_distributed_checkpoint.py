@@ -31,10 +31,10 @@ if TEST_WITH_DEV_DBG_ASAN:
     sys.exit(0)
 
 
-_DISTRIBUTED_STATE_DICT_IMPLS = (
+_DISTRIBUTED_STATE_DICT_IMPLS = {
     StateDictType.LOCAL_STATE_DICT,
     StateDictType.SHARDED_STATE_DICT,
-)
+}
 
 
 class TestDistributedCheckpoint(FSDPTest):
@@ -94,6 +94,8 @@ class TestDistributedCheckpoint(FSDPTest):
 
 
 devices = ("cuda", "hpu", "xpu")
-instantiate_device_type_tests(TestDistributedCheckpoint, globals(), only_for=devices, allow_xpu=True)
+instantiate_device_type_tests(
+    TestDistributedCheckpoint, globals(), only_for=devices, allow_xpu=True
+)
 if __name__ == "__main__":
     run_tests()
