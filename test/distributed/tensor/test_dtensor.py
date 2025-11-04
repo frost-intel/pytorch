@@ -1144,8 +1144,8 @@ class TestDTensorSpec(DTensorTestBase):
             """RRS(1)""",
         )
 
-    @with_comms
     @skip_if_lt_x_gpu(8)
+    @with_comms
     def test_dtensor_spec_with_invalid_shard_order(self):
         mesh_shape = (2, 2, self.world_size // 4)
         mesh = init_device_mesh(self.device_type, mesh_shape)
@@ -1194,8 +1194,8 @@ class TestDTensorSpec(DTensorTestBase):
                 ShardOrderEntry(tensor_dim=-1, mesh_dims=(1, 0)),
             )
 
-    @with_comms
     @skip_if_lt_x_gpu(8)
+    @with_comms
     def test_dtensor_spec_update(self):
         mesh_shape = (2, 2, self.world_size // 4)
         mesh = init_device_mesh(self.device_type, mesh_shape)
@@ -1218,6 +1218,7 @@ class TestDTensorSpec(DTensorTestBase):
         self.assertNotEqual(hash(tensor_global_1._spec), hash(tensor_global_2._spec))
         self.assertNotEqual(tensor_global_1._spec, tensor_global_2._spec)
 
+    @skip_if_lt_x_gpu(8)
     @with_comms
     def test_dtensor_spec_default_shard_order_generation(self):
         mesh_shape = (2, 2, self.world_size // 4)
@@ -1254,8 +1255,8 @@ class TestDTensorSpec(DTensorTestBase):
         )
         self.assertEqual(tensor_global._spec.shard_order, ())
 
-    @with_comms
     @skip_if_lt_x_gpu(8)
+    @with_comms
     def test_default_shard_order(self):
         mesh_shape = (2, 2, self.world_size // 4)
         mesh = init_device_mesh(self.device_type, mesh_shape)
