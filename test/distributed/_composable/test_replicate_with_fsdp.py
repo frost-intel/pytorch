@@ -28,6 +28,9 @@ from torch.testing._internal.distributed._tensor.common_dtensor import (
     Transformer,
 )
 
+device_type = (
+    acc.type if (acc := torch.accelerator.current_accelerator(True)) else "cpu"
+)
 
 class Net(nn.Module):
     def __init__(self) -> None:
@@ -49,7 +52,7 @@ class ReplicateTest(MultiProcessTestCase):
         # Prefer to test with >=4 GPUs, but for 2 GPUs, use 2-way TP
         replicate_size = 2
         return init_device_mesh(
-            "cuda",
+            device_type,
             (replicate_size, 1, self.world_size // replicate_size),
             mesh_dim_names=("replicate", "shard", "tp"),
         )
@@ -68,9 +71,9 @@ class ReplicateTest(MultiProcessTestCase):
     def _init_pg(self):
         # Set the device explicitly before initializing the process group
 
-        torch.cuda.set_device(self.rank % self.world_size)
+        torch.accelerator.set_device_idx(self.rank % self.world_size)
         dist.init_process_group(
-            backend="nccl",
+            backend="xccl",
             rank=self.rank,
             world_size=self.world_size,
             store=dist.FileStore(self.file_name, self.world_size),
@@ -186,7 +189,7 @@ class ReplicateTest(MultiProcessTestCase):
 
         self._init_pg()
 
-        device = torch.device(f"cuda:{self.rank % torch.cuda.device_count()}")
+        device = torch.device(f"{device_type}:{self.rank % torch.accelerator.device_count()}")
         model = Net().to(device)
         replicate_model = deepcopy(model)
 
@@ -213,7 +216,7 @@ class ReplicateTest(MultiProcessTestCase):
         """
         self._init_pg()
 
-        device = torch.device(f"cuda:{self.rank % torch.cuda.device_count()}")
+        device = torch.device(f"{device_type}:{self.rank % torch.accelerator.device_count()}")
         model = Net().to(device)
         replicate_model = deepcopy(model)
 
@@ -286,7 +289,7 @@ class ReplicateTest(MultiProcessTestCase):
 
         torch.manual_seed(42)
         model = MLPStack(mlp_dim)
-        ref_model = copy.deepcopy(model).cuda()
+        ref_model = copy.deepcopy(model).to(device_type)
         replicate(ref_model, device_mesh=replicate_shard_mesh)
         ref_optim = torch.optim.Adam(ref_model.parameters(), lr=1e-2, foreach=False)
         model.parallelize(
@@ -298,7 +301,7 @@ class ReplicateTest(MultiProcessTestCase):
         optim = torch.optim.Adam(model.parameters(), lr=1e-2, foreach=False)
 
         torch.manual_seed(42 + replicate_pg.rank() + 1)
-        device = torch.device("cuda")
+        device = torch.device(device_type)
         for iter_idx in range(10):
             inp = torch.randn((8, mlp_dim), device=device)
             losses: list[torch.Tensor] = []
