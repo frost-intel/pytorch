@@ -5,7 +5,7 @@ import sys
 import torch
 import torch.distributed as dist
 from torch.distributed._shard import shard_parameter
-from torch.testing._internal.common_distributed import requires_nccl, skip_if_lt_x_gpu
+from torch.testing._internal.common_distributed import requires_accelerator_dist_backend, skip_if_lt_x_gpu
 from torch.testing._internal.common_utils import run_tests, TEST_WITH_DEV_DBG_ASAN
 from torch.testing._internal.distributed._shard.sharded_tensor import (
     ShardedTensorTestBase,
@@ -46,7 +46,7 @@ class TestShardedEmbedding(ShardedTensorTestBase):
             max_norm=max_norm,
             norm_type=norm_type,
             padding_idx=padding_idx,
-        ).cuda(self.rank)
+        ).to(self.rank)
 
         sharded_embedding = torch.nn.Embedding(
             num_embeddings,
@@ -64,7 +64,7 @@ class TestShardedEmbedding(ShardedTensorTestBase):
 
         # Run sharded computation
         torch.manual_seed(self.rank)  # inputs different on each rank
-        inp = torch.randint(0, num_embeddings, tuple(input_size)).cuda(self.rank)
+        inp = torch.randint(0, num_embeddings, tuple(input_size)).to(self.rank)
         sharded_output = sharded_embedding(inp)
 
         # If max_norm is set, we need to ensure that the renorm has been applied across
@@ -114,7 +114,7 @@ class TestShardedEmbedding(ShardedTensorTestBase):
 
     @with_comms(init_rpc=False)
     @skip_if_lt_x_gpu(TEST_GPU_NUM)
-    @requires_nccl()
+    @requires_accelerator_dist_backend(["nccl", "xccl"])
     def test_sharded_embedding_colwise(self):
         for spec in generate_chunk_sharding_specs_for_test(1):
             self._run_sharded_embedding(spec, [5, 4], 17, 12)
@@ -150,7 +150,7 @@ class TestShardedEmbedding(ShardedTensorTestBase):
 
     @with_comms(init_rpc=False)
     @skip_if_lt_x_gpu(TEST_GPU_NUM)
-    @requires_nccl()
+    @requires_accelerator_dist_backend(["nccl", "xccl"])
     def test_sharded_embedding_rowwise(self):
         for spec in generate_chunk_sharding_specs_for_test(0):
             # Test even split.
