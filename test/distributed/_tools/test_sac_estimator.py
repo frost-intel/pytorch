@@ -5,12 +5,15 @@ import torch
 from torch._subclasses.fake_tensor import FakeTensorMode
 from torch.distributed._tools.sac_estimator import SACEstimator
 from torch.testing._internal.common_cuda import TEST_CUDA
-from torch.testing._internal.common_utils import run_tests, skipIfTorchDynamo, TestCase
+from torch.testing._internal.common_utils import run_tests, skipIfTorchDynamo, TestCase, TEST_XPU
 from torch.testing._internal.distributed._tensor.common_dtensor import (
     ModelArgs,
     Transformer,
 )
 
+device_type = (
+    acc.type if (acc := torch.accelerator.current_accelerator(True)) else "cpu"
+)
 
 class TestSACEstimator(TestCase):
     def _sac_estimation(
@@ -26,10 +29,10 @@ class TestSACEstimator(TestCase):
         sace.pwlf_sac_tradeoff_curve(n_segments=2, save_tradeoff_graphs=False)
 
     @skipIfTorchDynamo("https://github.com/pytorch/pytorch/issues/115653")
-    @unittest.skipIf(not TEST_CUDA, "CUDA not available")
+    @unittest.skipIf(not TEST_CUDA and not TEST_XPU, "CUDA not available")
     def test_transformer_sac_estimation(self):
         """Runs a basic GPT-2 model"""
-        dev = torch.cuda.current_device()
+        dev = torch.accelerator.current_device_idx()
         vocab_size = 8192
         bsz, seq_len = 8, 1024
         model_args = ModelArgs(
@@ -51,7 +54,7 @@ class TestSACEstimator(TestCase):
             self._sac_estimation("operator-level-cost-model", model, inp)
 
     @skipIfTorchDynamo("https://github.com/pytorch/pytorch/issues/115653")
-    @unittest.skipIf(not TEST_CUDA, "CUDA not available")
+    @unittest.skipIf(not TEST_CUDA and not TEST_XPU, "CUDA not available")
     def test_simple_model_sac_estimation(self):
         """This test checks the correctness of view_ops, random_ops and inplace_ops"""
 
@@ -68,7 +71,7 @@ class TestSACEstimator(TestCase):
                 x = torch.sin_(x)
                 return x
 
-        dev = torch.cuda.current_device()
+        dev = torch.accelerator.current_device_idx()
         with FakeTensorMode():
             with torch.device(dev):
                 model = Foo()
