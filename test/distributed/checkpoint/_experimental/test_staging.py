@@ -15,6 +15,7 @@ requires_gpu = unittest.skipUnless(
 )
 class TestDefaultStager(TestCase):
     def setUp(self) -> None:
+        super().setUp()
         # Create a test state dictionary with various data types
         self.state_dict = {
             "model": torch.nn.Linear(10, 5).state_dict(),

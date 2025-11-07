@@ -46,7 +46,7 @@ import torch
 from torch import SymInt
 from torch._dispatch.python import enable_python_dispatcher
 from torch._dynamo.graph_bytecode_inputs import (
-    get_user_object_by_index,
+    get_external_object_by_index,
     register_user_object,
 )
 from torch._dynamo.utils import (
@@ -1057,14 +1057,11 @@ class VariableBuilder:
             self.install_guards(GuardBuilder.TYPE_MATCH)
             index = register_user_object(value, self.source)
             stream_proxy = self.tx.output.create_proxy(
-                "call_function", get_user_object_by_index, (index,), {}
+                "call_function", get_external_object_by_index, (index,), {}
             )
             set_example_value(stream_proxy.node, value)
             var = StreamVariable(
-                stream_proxy,
-                value,
-                value.device,
-                source=self.source,
+                stream_proxy, value, source=self.source, user_object_index=index
             )
             return self.tx.output.side_effects.track_object_existing(value, var)
         elif isinstance(value, (torch._C._SDPAParams)):
@@ -1078,7 +1075,7 @@ class VariableBuilder:
             index = register_user_object(value, self.source)
             event_proxy = self.tx.output.create_proxy(
                 "call_function",
-                get_user_object_by_index,
+                get_external_object_by_index,
                 (index,),
                 {},
             )
@@ -3006,14 +3003,17 @@ def handle_traced_output(example_value, tx, proxy, options, subclass_type, targe
         set_example_value(proxy.node, example_value)
         return SymNodeVariable(proxy, example_value, **options)
     elif (
-        inspect.isclass(proxy.node.target)
-        and issubclass(proxy.node.target, torch.Stream)
+        isinstance(example_value, torch.Stream)
+        and proxy.node.target == get_external_object_by_index
     ) or proxy.node.target in [
         device_interface.current_stream
         for _, device_interface in get_registered_device_interfaces()
     ]:
         set_example_value(proxy.node, example_value)
-        return StreamVariable(proxy, example_value, example_value.device, **options)
+        index = None
+        if proxy.node.target == get_external_object_by_index:
+            index = proxy.node.args[0]
+        return StreamVariable(proxy, example_value, index, **options)
     elif (
         inspect.isclass(proxy.node.target)
         and issubclass(proxy.node.target, torch.Event)
@@ -3727,9 +3727,7 @@ class SourcelessBuilder:
                 pass  # failthrough to unimplemented branch
         elif isinstance(value, torch.fx.graph_module.GraphModule):
             return SourcelessGraphModuleVariable(value)
-        elif isinstance(
-            value, (torch.utils._pytree.TreeSpec, torch.utils._pytree.LeafSpec)
-        ):
+        elif isinstance(value, torch.utils._pytree.TreeSpec):
             return UserDefinedObjectVariable(value)
         elif PlacementVariable.is_placement(value):
             return PlacementVariable(value)
