@@ -2179,9 +2179,9 @@ class TestSyncDecisionCrossRanks(MultiProcessTestCase):
     @skip_if_lt_x_gpu(2)
     def test_comm_analysis(self):
         store = c10d.FileStore(self.file_name, self.world_size)
-        torch.cuda.set_device(self.rank)
+        torch.accelerator.set_device_idx(self.rank)
         c10d.init_process_group(
-            backend="nccl", store=store, rank=self.rank, world_size=self.world_size
+            backend="xccl", store=store, rank=self.rank, world_size=self.world_size
         )
         group = c10d.distributed_c10d._get_default_group()
         group_name = "default"
