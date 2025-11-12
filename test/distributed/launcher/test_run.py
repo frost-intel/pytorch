@@ -271,6 +271,8 @@ class ElasticLaunchTest(TestCase):
     @skip_but_pass_in_sandcastle_if(
         TEST_WITH_DEV_DBG_ASAN, "test incompatible with dev/dbg asan"
     )
+    @patch("torch.cuda.is_available", return_value=True)
+    @patch("torch.cuda.device_count", return_value=3)
     @patch("torch.accelerator.is_available", return_value=True)
     @patch("torch.accelerator.device_count", return_value=3)
     @patch("torch.accelerator.current_accelerator", return_value=MagicMock(type="gpu"))
