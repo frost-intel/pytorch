@@ -853,7 +853,7 @@ class TestReplicationStager(DTensorTestBase):
 
     @property
     def backend(self) -> str:
-        return "cpu:gloo,cuda:nccl"
+        return "cpu:gloo,cuda:nccl,xpu:xccl"
 
     def _create_simple_state_dict(self, rank: int) -> dict:
         """
