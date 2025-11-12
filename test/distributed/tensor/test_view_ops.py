@@ -35,12 +35,13 @@ from torch.testing._internal.distributed._tensor.common_dtensor import (
     with_comms,
 )
 from torch.utils import _pytree as pytree
+from torch.testing._internal.common_distributed import skip_if_lt_x_gpu
 
-
+@skip_if_lt_x_gpu(6)
 class TestViewOps(DTensorTestBase):
     @property
     def world_size(self) -> int:
-        return min(6, torch.accelerator.device_count())
+        return 6
 
     def test_view_groups(self):
         self.assertEqual(
