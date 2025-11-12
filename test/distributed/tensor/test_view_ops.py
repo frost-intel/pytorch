@@ -37,7 +37,6 @@ from torch.testing._internal.distributed._tensor.common_dtensor import (
 from torch.utils import _pytree as pytree
 from torch.testing._internal.common_distributed import skip_if_lt_x_gpu
 
-@skip_if_lt_x_gpu(6)
 class TestViewOps(DTensorTestBase):
     @property
     def world_size(self) -> int:
@@ -219,6 +218,7 @@ class TestViewOps(DTensorTestBase):
         self.assertEqual(rules, expected_rule_output)
         self.call_dt_test(op, args, {}, self.device_mesh)
 
+    @skip_if_lt_x_gpu(2)
     @with_comms
     def test_illegal_views(self):
         device_mesh = self.build_device_mesh()
@@ -248,6 +248,7 @@ class TestViewOps(DTensorTestBase):
         with self.assertRaisesRegex(RuntimeError, "Sharding propagation failed"):
             shard.view(8, 2, -1)
 
+    @skip_if_lt_x_gpu(6)
     @with_comms
     def test_view_ops(self):
         mesh_shape = (dist.get_world_size() // 2, 2)
@@ -545,6 +546,7 @@ class TestViewOps(DTensorTestBase):
     #         Split(InputDim(1), (13, 2), 1),
     #     ),
     # )
+    @skip_if_lt_x_gpu(6)
     @with_comms
     def test_complex_view_ops(self):
         self.device_mesh = DeviceMesh(
@@ -590,6 +592,7 @@ class TestViewOps(DTensorTestBase):
             )
             self.assertEqual(out, out_dt.full_tensor())
 
+    @skip_if_lt_x_gpu(6)
     @with_comms
     def test_dtensor_view_op_uneven(self):
         """
@@ -633,6 +636,7 @@ class TestViewOps(DTensorTestBase):
                 )
                 self.assertEqual(len(comm_mode.get_comm_counts()), 0)
 
+    @skip_if_lt_x_gpu(6)
     @with_comms
     def test_view_redistribution(self):
         """
@@ -646,6 +650,7 @@ class TestViewOps(DTensorTestBase):
         with self.assertRaisesRegex(RuntimeError, "Sharding propagation failed"):
             dtensor_x.view(-1, 8)
 
+    @skip_if_lt_x_gpu(6)
     @with_comms
     def test_squeeze_(self):
         mesh_2d = init_device_mesh(self.device_type, (3, 2), mesh_dim_names=("a", "b"))
