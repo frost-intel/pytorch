@@ -218,7 +218,7 @@ class TestViewOps(DTensorTestBase):
         self.assertEqual(rules, expected_rule_output)
         self.call_dt_test(op, args, {}, self.device_mesh)
 
-    @skip_if_lt_x_gpu(2)
+    @skip_if_lt_x_gpu(6)
     @with_comms
     def test_illegal_views(self):
         device_mesh = self.build_device_mesh()
