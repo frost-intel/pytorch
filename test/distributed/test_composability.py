@@ -24,7 +24,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.testing._internal.common_cuda import TEST_MULTIGPU
 from torch.testing._internal.common_distributed import (
     MultiProcContinuousTest,
-    requires_nccl,
+    requires_accelerator_dist_backend,
     skip_if_lt_x_gpu,
 )
 from torch.testing._internal.common_utils import (
@@ -37,6 +37,7 @@ from torch.testing._internal.common_utils import (
 
 
 device_type = acc.type if (acc := torch.accelerator.current_accelerator()) else "cpu"
+backend = torch.distributed.get_default_backend_for_device(device_type)
 
 
 # MLP Layer
@@ -99,7 +100,7 @@ class ComposabilityTest(MultiProcContinuousTest):
     @classmethod
     def backend_str(cls) -> str:
         # Testing with NCCL backend
-        return "nccl"
+        return backend
 
     @property
     def device(self) -> torch.device:
@@ -191,7 +192,7 @@ class ComposabilityTest(MultiProcContinuousTest):
             )
         return pipeline_schedule, partial_models, offsets
 
-    @requires_nccl()
+    @requires_accelerator_dist_backend(["nccl", "xccl"])
     @skip_if_lt_x_gpu(4)
     @skip_but_pass_in_sandcastle_if(not TEST_MULTIGPU, "Test requires 4+ GPUs")
     @parametrize(
@@ -272,7 +273,7 @@ class ComposabilityTest(MultiProcContinuousTest):
                 ref_p = ref_parameters[name]
                 torch.testing.assert_close(p.grad, ref_p.grad)
 
-    @requires_nccl()
+    @requires_accelerator_dist_backend(["nccl", "xccl"])
     @skip_if_lt_x_gpu(4)
     @skip_but_pass_in_sandcastle_if(not TEST_MULTIGPU, "Test requires 4+ GPUs")
     @parametrize("dp_type", ["FSDP", "FSDP_MP"])
@@ -382,7 +383,7 @@ class ComposabilityTest(MultiProcContinuousTest):
                     p.grad.full_tensor(), ref_p.grad, atol=5e-5, rtol=2e-2
                 )
 
-    @requires_nccl()
+    @requires_accelerator_dist_backend(["nccl", "xccl"])
     @skip_if_lt_x_gpu(4)
     @skip_but_pass_in_sandcastle_if(not TEST_MULTIGPU, "Test requires 4+ GPUs")
     @parametrize("dp_type", ["FSDP", "FSDP_MP"])
