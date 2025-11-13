@@ -36,7 +36,7 @@ from torch.testing._internal.common_utils import (
 )
 
 
-device_type = "cuda"
+device_type = acc.type if (acc := torch.accelerator.current_accelerator()) else "cpu"
 
 
 # MLP Layer
@@ -212,7 +212,7 @@ class ComposabilityTest(MultiProcContinuousTest):
         mesh_shape = (self.world_size // 2, 2)
         mesh_dim_names = ("dp", "pp")
         device_mesh = init_device_mesh(
-            "cuda", mesh_shape=mesh_shape, mesh_dim_names=mesh_dim_names
+            device_type, mesh_shape=mesh_shape, mesh_dim_names=mesh_dim_names
         )
         pp_group = device_mesh["pp"].get_group()
         dp_mesh = device_mesh["dp"]
@@ -293,7 +293,7 @@ class ComposabilityTest(MultiProcContinuousTest):
         mesh_shape = (self.world_size // 2, 2)
         mesh_dim_names = ("dp", "pp")
         device_mesh = init_device_mesh(
-            "cuda", mesh_shape=mesh_shape, mesh_dim_names=mesh_dim_names
+            device_type, mesh_shape=mesh_shape, mesh_dim_names=mesh_dim_names
         )
         pp_group = device_mesh["pp"].get_group()
         dp_mesh = device_mesh["dp"]
@@ -395,7 +395,7 @@ class ComposabilityTest(MultiProcContinuousTest):
         mesh_shape = (self.world_size, 1)
         mesh_dim_names = ("dp", "pp")
         device_mesh = init_device_mesh(
-            "cuda", mesh_shape=mesh_shape, mesh_dim_names=mesh_dim_names
+            device_type, mesh_shape=mesh_shape, mesh_dim_names=mesh_dim_names
         )
         pp_group = device_mesh["pp"].get_group()
         dp_mesh = device_mesh["dp"]
