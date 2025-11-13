@@ -132,7 +132,7 @@ class TestCollectiveUtils(MultiProcessTestCase):
         with self.assertRaisesRegex(Exception, expected_exception):
             all_gather(data_or_fn=func)
 
-    @parametrize("device", ["cpu", device_type.type])
+    @parametrize("device", ["cpu", device_type])
     def test_check_rng_sync(
         self,
         device,
