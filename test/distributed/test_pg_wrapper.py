@@ -20,6 +20,7 @@ from torch.testing._internal.common_distributed import (
     create_device,
     MultiProcessTestCase,
     requires_gloo,
+    requires_nccl,
     requires_accelerator_dist_backend,
     skip_if_lt_x_gpu,
     with_dist_debug_levels,
@@ -210,7 +211,7 @@ class AbstractProcessGroupWrapperTest(MultiProcessTestCase):
 if not TEST_WITH_DEV_DBG_ASAN:
 
     @requires_gloo()
-    @requires_accelerator_dist_backend(["nccl", "xccl"])
+    @requires_nccl()
     class ProcessGroupNCCLWrapperTest(AbstractProcessGroupWrapperTest):
         def setUp(self):
             super(AbstractProcessGroupWrapperTest, self).setUp()
