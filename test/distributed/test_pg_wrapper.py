@@ -20,12 +20,14 @@ from torch.testing._internal.common_distributed import (
     create_device,
     MultiProcessTestCase,
     requires_gloo,
-    requires_nccl,
+    requires_accelerator_dist_backend,
     skip_if_lt_x_gpu,
     with_dist_debug_levels,
 )
 from torch.testing._internal.common_utils import run_tests, TEST_WITH_DEV_DBG_ASAN
 
+device_type = acc.type if (acc := torch.accelerator.current_accelerator()) else "cpu"
+backend = c10d.get_default_backend_for_device(device_type)
 
 class AbstractProcessGroupWrapperTest(MultiProcessTestCase):
     def setUp(self):
@@ -44,9 +46,9 @@ class AbstractProcessGroupWrapperTest(MultiProcessTestCase):
                 f"Did not find shapes {list(tensor.shape)} in error {err}",
             )
             # For CUDA, only assert on device type, not index
-            if "cuda" in str(tensor.device):
+            if device_type in str(tensor.device):
                 self.assertTrue(
-                    "cuda" in err, f"Did not find cuda device in error {err}"
+                    device_type in err, f"Did not find cuda device in error {err}"
                 )
             else:
                 self.assertTrue(
@@ -208,7 +210,7 @@ class AbstractProcessGroupWrapperTest(MultiProcessTestCase):
 if not TEST_WITH_DEV_DBG_ASAN:
 
     @requires_gloo()
-    @requires_nccl()
+    @requires_accelerator_dist_backend(["nccl", "xccl"])
     class ProcessGroupNCCLWrapperTest(AbstractProcessGroupWrapperTest):
         def setUp(self):
             super(AbstractProcessGroupWrapperTest, self).setUp()
@@ -224,14 +226,14 @@ if not TEST_WITH_DEV_DBG_ASAN:
         def _create_wrapper_pg(self, with_new_group=False, timeout=10.0):
             store = c10d.FileStore(self.file_name, self.world_size)
             c10d.init_process_group(
-                backend="nccl",
+                backend=backend,
                 rank=self.rank,
                 world_size=self.world_size,
                 store=store,
                 timeout=timedelta(seconds=timeout),
             )
             if with_new_group:
-                pg = c10d.new_group(backend="nccl", timeout=timedelta(seconds=timeout))
+                pg = c10d.new_group(backend=backend, timeout=timedelta(seconds=timeout))
             else:
                 _pg = c10d.ProcessGroupNCCL(
                     store,
@@ -249,7 +251,7 @@ if not TEST_WITH_DEV_DBG_ASAN:
                 )
             return pg
 
-        @requires_nccl()
+        @requires_accelerator_dist_backend(["nccl", "xccl"])
         @skip_if_lt_x_gpu(2)
         def test_collective_hang(self):
             pg = self._create_wrapper_pg(timeout=2.0)
@@ -258,7 +260,7 @@ if not TEST_WITH_DEV_DBG_ASAN:
         # NOTE: these tests are separated by debug level instead of combined into
         # one due to https://github.com/pytorch/pytorch/issues/55967, they can be
         # combined after that is resolved.
-        @requires_nccl()
+        @requires_accelerator_dist_backend(["nccl", "xccl"])
         @skip_if_lt_x_gpu(2)
         @with_dist_debug_levels(levels=["DETAIL"])
         def test_collectives_op_mismatch_debug_mode(self):
@@ -266,7 +268,7 @@ if not TEST_WITH_DEV_DBG_ASAN:
             self._test_collectives_op_mismatch(pg, use_cuda=True)
             self._test_nccl_only_op_mismatch(pg)
 
-        @requires_nccl()
+        @requires_accelerator_dist_backend(["nccl", "xccl"])
         @skip_if_lt_x_gpu(2)
         @with_dist_debug_levels(levels=["OFF"])
         def test_collectives_op_mismatch(self):
@@ -274,7 +276,7 @@ if not TEST_WITH_DEV_DBG_ASAN:
             self._test_collectives_op_mismatch(pg, use_cuda=True)
             self._test_nccl_only_op_mismatch(pg)
 
-        @requires_nccl()
+        @requires_accelerator_dist_backend(["nccl", "xccl"])
         @skip_if_lt_x_gpu(2)
         @with_dist_debug_levels(levels=["DETAIL"])
         def test_collective_shape_mismatch_debug_mode_detail(self):
@@ -282,7 +284,7 @@ if not TEST_WITH_DEV_DBG_ASAN:
             self._test_collective_shape_mismatch(pg, use_cuda=True)
             self._test_nccl_only_shape_mismatch(pg)
 
-        @requires_nccl()
+        @requires_accelerator_dist_backend(["nccl", "xccl"])
         @skip_if_lt_x_gpu(2)
         @with_dist_debug_levels(levels=["OFF"])
         def test_collective_shape_mismatch_debug_mode_off(self):
@@ -291,7 +293,7 @@ if not TEST_WITH_DEV_DBG_ASAN:
             self._test_nccl_only_shape_mismatch(pg)
 
         def _test_nccl_only_op_mismatch(self, wrapper_pg):
-            device = f"cuda:{self.rank}"
+            device = f"{device_type}:{self.rank}"
             with self.assertRaisesRegex(RuntimeError, ".*") as cm:
                 output = torch.zeros(4 + self.rank, device=device)
                 input = torch.ones(4 * self.world_size, device=device)
@@ -309,7 +311,7 @@ if not TEST_WITH_DEV_DBG_ASAN:
             )
 
         def _test_nccl_only_shape_mismatch(self, wrapper_pg):
-            device = f"cuda:{self.rank}"
+            device = f"{device_type}:{self.rank}"
             with self.assertRaisesRegex(RuntimeError, ".*") as cm:
                 output = torch.zeros(4 + self.rank, device=device)
                 input = torch.ones(4 * (self.world_size + 1), device=device)
@@ -335,7 +337,7 @@ if not TEST_WITH_DEV_DBG_ASAN:
                 verify_diff=False,
             )
 
-        @requires_nccl()
+        @requires_accelerator_dist_backend(["nccl", "xccl"])
         @skip_if_lt_x_gpu(2)
         @with_dist_debug_levels(levels=["DETAIL"])
         def test_coalescing_manager_debug_mode_detail(self):
@@ -343,14 +345,14 @@ if not TEST_WITH_DEV_DBG_ASAN:
             Tests that coalescing manager w/TORCH_DISTRIBUTED_DEBUG
             does not crash: https://github.com/pytorch/pytorch/issues/109520
             """
-            torch.cuda.set_device(self.rank)
+            torch.accelerator.set_device_idx(self.rank)
             pg = self._create_wrapper_pg(with_new_group=True)
-            dev = torch.cuda.current_device()
+            dev = torch.accelerator.current_device_idx()
             pg._start_coalescing(torch.device(dev))
             pg.allreduce([torch.ones(1, device=dev)])
             pg._end_coalescing(torch.device(dev))
 
-        @requires_nccl()
+        @requires_accelerator_dist_backend(["nccl", "xccl"])
         @skip_if_lt_x_gpu(2)
         @with_dist_debug_levels(levels=["DETAIL"])
         @patch("torch.distributed.distributed_c10d._GLOO_AVAILABLE", False)
@@ -360,7 +362,7 @@ if not TEST_WITH_DEV_DBG_ASAN:
             ):
                 self._create_wrapper_pg()
 
-        @requires_nccl()
+        @requires_accelerator_dist_backend(["nccl", "xccl"])
         @skip_if_lt_x_gpu(2)
         @patch("torch.distributed.distributed_c10d._GLOO_AVAILABLE", False)
         def test_new_group_no_gloo(self):
@@ -464,7 +466,7 @@ class ProcessGroupGlooWrapperTest(AbstractProcessGroupWrapperTest):
 
 
 if __name__ == "__main__":
-    assert not torch.cuda._initialized, (
+    assert not torch.accelerator.is_available(), (
         "test_pg_wrapper must not have initialized CUDA context on main process"
     )
 
