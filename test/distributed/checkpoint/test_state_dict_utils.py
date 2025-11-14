@@ -51,7 +51,7 @@ class TestStateDictUtils(DTensorTestBase):
             dist_tensor.to_local(), gather_dim=0, group=(device_mesh, 0)
         )
         self.assertEqual(expected_gathered_dtensor, gathered_state_dict["dtensor"])
-        self.assertTrue(gathered_state_dict["dtensor"].device.type == torch.accelerator.current_accelerator().type)
+        self.assertEqual(gathered_state_dict["dtensor"].device.type, self.device_type)
 
     @with_comms
     @skip_if_lt_x_gpu(4)
@@ -71,7 +71,9 @@ class TestStateDictUtils(DTensorTestBase):
         )
         if dist.get_rank() in (0, 2):
             self.assertEqual(expected_gathered_dtensor, gathered_state_dict["dtensor"])
-            self.assertFalse(gathered_state_dict["dtensor"].device.type == torch.accelerator.current_accelerator().type)
+            self.assertNotEqual(
+                gathered_state_dict["dtensor"].device.type, self.device_type
+            )
         else:
             self.assertEqual(gathered_state_dict, {})
 
@@ -87,7 +89,7 @@ class TestStateDictUtils(DTensorTestBase):
         cpu_state_dict = _offload_state_dict_to_cpu(state_dict, ranks_only=(0, 2))
         if dist.get_rank() in (0, 2):
             for v in cpu_state_dict.values():
-                self.assertFalse(v.device.type == torch.accelerator.current_accelerator().type)
+                self.assertNotEqual(v.device.type, self.device_type)
             self.assertEqual(cpu_state_dict["tensor1"], torch.arange(10))
             self.assertEqual(cpu_state_dict["tensor2"], torch.ones(10))
         else:
@@ -293,13 +295,12 @@ class TestStateDictUtils(DTensorTestBase):
 
         self.assertFalse(torch.equal(sd["k"].cpu(), cpu_sd["k"]))
         _copy_state_dict(sd, cpu_sd, non_blocking=True)
-        mod = torch.get_device_module(self.device_type)
-        mod.synchronize()
+        torch.accelerator.synchronize()
         self.assertTrue(torch.equal(sd["k"].cpu(), cpu_sd["k"]))
         sd["k"] += 1
         self.assertFalse(torch.equal(sd["k"].cpu(), cpu_sd["k"]))
         _copy_state_dict(sd, cpu_sd, non_blocking=True)
-        mod.synchronize()
+        torch.accelerator.synchronize()
         self.assertTrue(torch.equal(sd["k"].cpu(), cpu_sd["k"]))
 
 

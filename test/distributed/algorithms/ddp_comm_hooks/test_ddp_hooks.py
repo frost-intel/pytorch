@@ -1,6 +1,5 @@
 # Owner(s): ["oncall: distributed"]
 
-import os
 import sys
 
 import torch
@@ -18,7 +17,7 @@ from torch.distributed.algorithms.ddp_comm_hooks import (
 )
 from torch.nn.parallel import DistributedDataParallel
 from torch.testing._internal.common_distributed import (
-    MultiProcessTestCase,
+    DistributedTestBase,
     requires_accelerator_dist_backend,
     skip_if_lt_x_gpu,
 )
@@ -31,6 +30,9 @@ if TEST_WITH_DEV_DBG_ASAN:
 
 device_type = acc.type if (acc := torch.accelerator.current_accelerator()) else "cpu"
 backend = dist.get_default_backend_for_device(device_type)
+
+device_type = acc.type if (acc := torch.accelerator.current_accelerator()) else "cpu"
+
 
 def gpus_for_rank(world_size):
     visible_devices = list(range(torch.accelerator.device_count()))
@@ -62,27 +64,7 @@ class TestDdpCommHook(nn.Module):
         return self.t0(x ** (1 + rank))
 
 
-class DistributedDataParallelCommHookTest(MultiProcessTestCase):
-    def setUp(self):
-        super().setUp()
-        self._spawn_processes()
-
-    def tearDown(self):
-        try:
-            os.remove(self.file_name)
-        except OSError:
-            pass
-
-    def _get_process_group_nccl(self):
-        store = dist.FileStore(self.file_name, self.world_size)
-        dist.init_process_group(
-            backend=backend,
-            world_size=self.world_size,
-            rank=self.rank,
-            store=store,
-        )
-        return dist.distributed_c10d._get_default_group()
-
+class DistributedDataParallelCommHookTest(DistributedTestBase):
     @property
     def world_size(self):
         return 2
@@ -121,14 +103,14 @@ class DistributedDataParallelCommHookTest(MultiProcessTestCase):
         param = next(model.parameters())
         return param.grad
 
-    @requires_accelerator_dist_backend(["nccl", "xccl"])
+    @requires_accelerator_dist_backend()
     @skip_if_lt_x_gpu(2)
     def test_ddp_comm_hook_allreduce_hook(self):
         """
         This unit test verifies the ``allreduce`` hook registered case gives same result
         with no hook registered case.
         """
-        process_group = self._get_process_group_nccl()
+        process_group = self.create_pg(device_type)
 
         # No hook registered case, get the reference grads.
         reference_grads = self._get_grads(process_group, None)
@@ -137,14 +119,14 @@ class DistributedDataParallelCommHookTest(MultiProcessTestCase):
 
         torch.testing.assert_close(hook_grads, reference_grads, rtol=1e-5, atol=0)
 
-    @requires_accelerator_dist_backend(["nccl", "xccl"])
+    @requires_accelerator_dist_backend()
     @skip_if_lt_x_gpu(2)
     def test_ddp_comm_hook_fp16compress_hook(self):
         """
         This unit test verifies the ``fp16 compress`` hook registered case
         gives close result with no hook registered case.
         """
-        process_group = self._get_process_group_nccl()
+        process_group = self.create_pg(device_type)
 
         # No hook registered case, get the reference grads.
         reference_grads = self._get_grads(process_group, None)
@@ -153,14 +135,14 @@ class DistributedDataParallelCommHookTest(MultiProcessTestCase):
 
         torch.testing.assert_close(hook_grads, reference_grads, rtol=1e-5, atol=1e-4)
 
-    @requires_accelerator_dist_backend(["nccl", "xccl"])
+    @requires_accelerator_dist_backend()
     @skip_if_lt_x_gpu(2)
     def test_ddp_comm_hook_quantize_per_tensor_hook(self):
         """
         This unit test verifies the ``quantize per tensor`` hook registered case
         gives close result with no hook registered case.
         """
-        process_group = self._get_process_group_nccl()
+        process_group = self.create_pg(device_type)
 
         # No hook registered case, get the reference grads.
         reference_grads = self._get_grads(process_group, None)
@@ -169,14 +151,14 @@ class DistributedDataParallelCommHookTest(MultiProcessTestCase):
 
         torch.testing.assert_close(hook_grads, reference_grads, rtol=1e-5, atol=1e-4)
 
-    @requires_accelerator_dist_backend(["nccl", "xccl"])
+    @requires_accelerator_dist_backend()
     @skip_if_lt_x_gpu(2)
     def test_ddp_comm_hook_quantize_per_channel_hook(self):
         """
         This unit test verifies the ``quantize per channel`` hook registered case
         gives close result with no hook registered case.
         """
-        process_group = self._get_process_group_nccl()
+        process_group = self.create_pg(device_type)
 
         # No hook registered case, get the reference grads.
         reference_grads = self._get_grads(process_group, None)
@@ -187,14 +169,14 @@ class DistributedDataParallelCommHookTest(MultiProcessTestCase):
 
         torch.testing.assert_close(hook_grads, reference_grads, rtol=1e-5, atol=1e-4)
 
-    @requires_accelerator_dist_backend(["nccl", "xccl"])
+    @requires_accelerator_dist_backend()
     @skip_if_lt_x_gpu(2)
     def test_ddp_comm_hook_noop_hook(self):
         """
         This unit test verifies the ``noop`` hook registered case and a subsequent allreduce
         gives same result with no hook registered case.
         """
-        process_group = self._get_process_group_nccl()
+        process_group = self.create_pg(device_type)
 
         # No hook registered case, get the reference grads.
         reference_grads = self._get_grads(process_group, None)
@@ -206,10 +188,10 @@ class DistributedDataParallelCommHookTest(MultiProcessTestCase):
 
         torch.testing.assert_close(hook_grads, reference_grads, rtol=1e-5, atol=0)
 
-    @requires_accelerator_dist_backend(["nccl", "xccl"])
+    @requires_accelerator_dist_backend()
     @skip_if_lt_x_gpu(2)
     def test_is_last_hook(self):
-        process_group = self._get_process_group_nccl()
+        process_group = self.create_pg(device_type)
 
         def hook(flags, bucket):
             flags.append(bucket.is_last())
