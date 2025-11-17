@@ -1,6 +1,7 @@
 # Owner(s): ["oncall: distributed"]
 
 import os
+import unittest
 import sys
 from datetime import timedelta
 from unittest.mock import patch
@@ -25,7 +26,7 @@ from torch.testing._internal.common_distributed import (
     skip_if_lt_x_gpu,
     with_dist_debug_levels,
 )
-from torch.testing._internal.common_utils import run_tests, TEST_WITH_DEV_DBG_ASAN
+from torch.testing._internal.common_utils import run_tests, TEST_WITH_DEV_DBG_ASAN, TEST_XPU
 
 device_type = acc.type if (acc := torch.accelerator.current_accelerator()) else "cpu"
 backend = c10d.get_default_backend_for_device(device_type)
@@ -385,6 +386,7 @@ if not TEST_WITH_DEV_DBG_ASAN:
 
 
 @requires_gloo()
+@unittest.skipIf(TEST_XPU, "XPU does not support gloo backend")
 class ProcessGroupGlooWrapperTest(AbstractProcessGroupWrapperTest):
     def opts(self, threads=2, timeout=10.0):
         opts = c10d.ProcessGroupGloo._Options()
