@@ -4839,7 +4839,7 @@ class DistributedTest:
                 nn.Sequential(nn.Linear(3, 3), nn.Linear(3, 3), nn.Linear(3, 3)).to(device_type)
             ]
             if HAS_TORCHVISION:
-                models_to_test.append(torchvision.models.resnet50().to(device_type)
+                models_to_test.append(torchvision.models.resnet50().to(device_type))
 
             for j, model in enumerate(models_to_test):
                 model_optim_in_bwd = copy.deepcopy(model)
