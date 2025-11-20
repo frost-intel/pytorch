@@ -4877,7 +4877,7 @@ class DistributedTest:
                 ):
                     for i in range(8):
                         inp = (
-                            torch.randn(1, 3, 1000, 1000, device=.to(torch.accelerator.current_accelerator()))
+                            torch.randn(1, 3, 1000, 1000, device=device_type)
                             if j == 1
                             else torch.randn(10, 3, device=device_type)
                         )
