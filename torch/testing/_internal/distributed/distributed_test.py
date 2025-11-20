@@ -1378,7 +1378,7 @@ class DistributedTest:
 
         # NCCL Batch SEND RECV
         @skip_if_no_gpu
-        @skip_but_pass_in_sandcastle_if((BACKEND != "nccl"), "NCCL or XCCL Batch Send Recv Only")
+        @skip_but_pass_in_sandcastle_if((BACKEND != "nccl" and BACKEND != "xccl"), "NCCL or XCCL Batch Send Recv Only")
         @skip_but_pass_in_sandcastle_if(
             torch.cuda.is_available() and torch.cuda.nccl.version() < (2, 7, 0),
             "Need NCCL 2.7+ for send/recv",
