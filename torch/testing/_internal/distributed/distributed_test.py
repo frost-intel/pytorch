@@ -1378,7 +1378,7 @@ class DistributedTest:
 
         # NCCL Batch SEND RECV
         @skip_if_no_gpu
-        @skip_but_pass_in_sandcastle_if((BACKEND != "nccl" and BACKEND != "xccl"), "NCCL or XCCL Batch Send Recv Only")
+        @skip_but_pass_in_sandcastle_if((BACKEND != "nccl"), "NCCL or XCCL Batch Send Recv Only")
         @skip_but_pass_in_sandcastle_if(
             torch.cuda.is_available() and torch.cuda.nccl.version() < (2, 7, 0),
             "Need NCCL 2.7+ for send/recv",
@@ -1447,7 +1447,7 @@ class DistributedTest:
             self._barrier()
 
         @skip_if_no_gpu
-        @skip_but_pass_in_sandcastle_if((BACKEND != "nccl" and BACKEND != "xccl"), "NCCL or XCCL Batch Send Recv Only")
+        @skip_but_pass_in_sandcastle_if((BACKEND != "nccl"), "NCCL or XCCL Batch Send Recv Only")
         @skip_but_pass_in_sandcastle_if(
             torch.cuda.is_available() and torch.cuda.nccl.version() < (2, 7, 0),
             "Need NCCL 2.7+ for send/recv",
@@ -2056,7 +2056,7 @@ class DistributedTest:
                 for src in group:
                     expected_tensor = _build_tensor(src + 1, value, dtype)
                     if cuda:
-                        expected_tensor = expected_tensor.cuda(rank_to_GPU[rank][0])
+                        expected_tensor = expected_tensor.to(rank_to_GPU[rank][0])
                     if rank == src:
                         if with_options:
                             opts = dist.BroadcastOptions()
@@ -2081,7 +2081,7 @@ class DistributedTest:
                     else:
                         tensor = _build_tensor(src + 1, -1, dtype)
                         if cuda:
-                            tensor = tensor.cuda(rank_to_GPU[rank][0])
+                            tensor = tensor.to(rank_to_GPU[rank][0])
                         if with_options:
                             opts = dist.BroadcastOptions()
                             opts.rootTensor = 0
@@ -4124,7 +4124,7 @@ class DistributedTest:
             for dest in group:
                 expected_time = torch.DoubleTensor(1).fill_(0.0)
                 if cuda:
-                    expected_time = expected_time.cuda(rank_to_GPU[rank][0])
+                    expected_time = expected_time.to(rank_to_GPU[rank][0])
                 if dest == rank:
                     expected_time.fill_(time.time() + WAIT_TIME)
                     dist.broadcast(expected_time, dest, group_id)
@@ -4832,13 +4832,14 @@ class DistributedTest:
             # allreduce won't have any effect.
             torch.manual_seed(self.rank)
             torch.accelerator.set_device_idx(self.rank)
+            device_type = torch.accelerator.current_accelerator()
 
             # Test a simple linear as well as a ResNet model.
             models_to_test = [
-                nn.Sequential(nn.Linear(3, 3), nn.Linear(3, 3), nn.Linear(3, 3)).cuda()
+                nn.Sequential(nn.Linear(3, 3), nn.Linear(3, 3), nn.Linear(3, 3)).to(device_type)
             ]
             if HAS_TORCHVISION:
-                models_to_test.append(torchvision.models.resnet50().cuda())
+                models_to_test.append(torchvision.models.resnet50().to(device_type)
 
             for j, model in enumerate(models_to_test):
                 model_optim_in_bwd = copy.deepcopy(model)
@@ -4876,9 +4877,9 @@ class DistributedTest:
                 ):
                     for i in range(8):
                         inp = (
-                            torch.randn(1, 3, 1000, 1000, device="cuda")
+                            torch.randn(1, 3, 1000, 1000, device=.to(torch.accelerator.current_accelerator()))
                             if j == 1
-                            else torch.randn(10, 3, device="cuda")
+                            else torch.randn(10, 3, device=device_type)
                         )
                         model(inp).sum().backward()
                         optim.step()
