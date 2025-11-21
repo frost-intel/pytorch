@@ -19,6 +19,9 @@ from torch.testing._internal.distributed.distributed_test import (
     TestDistBackend,
 )
 
+os.environ["BACKEND"] = "xccl"
+os.environ["TEMP_DIR"] = "/tmp"
+os.environ["WORLD_SIZE"] = torch.accelerator.device_count()
 
 if TEST_WITH_DEV_DBG_ASAN:
     print(
