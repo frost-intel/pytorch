@@ -659,7 +659,7 @@ class DTensorMeshTest(DTensorTestBase):
 
     @with_comms
     def test_dtensor_device_mesh_device_conversion(self):
-        # construct a cuda device mesh
+        # construct a gpu device mesh
         mesh = self.build_device_mesh()
 
         # construct from a cpu local tensor with gpu device mesh
@@ -1068,7 +1068,10 @@ class TestDTensorPlacementTypes(DTensorTestBase):
         # Keep everything deterministic.
         torch.manual_seed(0)
         tensor = torch.rand(size)
-        return tensor.to(self.device_type)
+        if self.device_type != "cpu":
+            return tensor.to(self.device_type)
+        else:
+            return tensor
 
     @with_comms
     def test_split_tensor_1D(self) -> None:

@@ -338,11 +338,14 @@ class DTensor(torch.Tensor):
         )
 
     @classmethod
+    @torch._disable_dynamo
+    # pyre-fixme[3]: Return type must be annotated.
+    # pyre-fixme[2]: Parameter must be annotated.
     def __torch_dispatch__(cls, func, types, args=(), kwargs=None):  # type: ignore[override]
-        # We just need to have an implementation here; the __torch_dispatch__ machinery
-        # calls into a specific C++ fast path that doesn't call here.
-        raise NotImplementedError(
-            "DTensor.__torch_dispatch__ should not actually get called"
+        return DTensor._op_dispatcher.dispatch(
+            func,
+            args,
+            kwargs or {},
         )
 
     @staticmethod
@@ -810,6 +813,11 @@ def distribute_tensor(
             local_tensor = Replicate._make_replicate_tensor(
                 local_tensor, device_mesh, idx, src_data_rank
             )
+        elif isinstance(placement, Partial):
+            local_tensor = Replicate._make_replicate_tensor(
+                local_tensor, device_mesh, idx, src_data_rank
+            )
+            local_tensor = placement._partition_value(local_tensor, device_mesh, idx)
         else:
             raise RuntimeError(
                 f"Trying to distribute tensor with unsupported placements {placement} on device mesh dimension {idx}!"

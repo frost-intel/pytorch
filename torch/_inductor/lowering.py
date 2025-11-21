@@ -2902,6 +2902,11 @@ if torch.xpu.is_available():
         aten.embedding_dense_backward, warn=False
     )  # (XPU-only and faster than decomp)
 
+if torch.mtia.is_available():
+    make_fallback(
+        aten.native_layer_norm, warn=False
+    )  # (MTIA-only and faster than decomp)
+
 
 # 1.5) Easy or Impossible
 make_fallback(aten._cdist_forward)  # p=2 should be feasible
@@ -3094,6 +3099,8 @@ make_fallback(aten._efficient_attention_backward.default, sdpa_constraint)
 # index_reduce requires fallback when use_scatter_fallback(...) returns True
 make_fallback(aten.index_reduce)
 make_fallback(aten.repeat_interleave.Tensor, override_decomp=True)
+
+make_fallback(aten._weight_norm_interface_backward.default, require_contiguous)
 
 
 # Register with type_promotion_kind None.

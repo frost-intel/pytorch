@@ -39,6 +39,7 @@ from torch.distributed.tensor.parallel import (
     RowwiseParallel,
 )
 from torch.distributed.tensor.placement_types import _StridedShard
+from torch.testing._internal.common_device_type import skipXPUIf
 from torch.testing._internal.common_distributed import skip_if_lt_x_gpu
 from torch.testing._internal.common_fsdp import get_devtype
 from torch.testing._internal.common_utils import (
@@ -60,6 +61,54 @@ from torch.utils.checkpoint import checkpoint
 
 
 dev_type = torch.device(get_devtype())
+
+
+class PytreeTuple:
+    """
+    Tuple-like values that are treated as leaves of a PyTree.
+    """
+
+    def __init__(self, *values):
+        self._values = tuple(values)
+
+    def __repr__(self):
+        pr = repr(self._values)[1:-1]
+        return f"{type(self).__name__}({pr})"
+
+    def __getitem__(self, i):
+        return self._values[i]
+
+    def __iter__(self):
+        return iter(self._values)
+
+    def __len__(self):
+        return len(self._values)
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, self.__class__):
+            return self._values == other._values
+        elif isinstance(other, tuple):
+            return self._values == other
+        return False
+
+    def __hash__(self) -> int:
+        return hash(self._values)
+
+    def __add__(self, other):
+        if isinstance(other, (self.__class__, tuple)):
+            return self.__class__(*self, *other)
+        raise NotImplementedError(type(other))
+
+    def __radd__(self, other):
+        if isinstance(other, (self.__class__, tuple)):
+            return self.__class__(*other, *self)
+        raise NotImplementedError(type(other))
+
+    def index(self, value):
+        return self._values.index(value)
+
+    def count(self, value):
+        return self._values.count(value)
 
 
 class SimpleModel(nn.Module):
@@ -91,6 +140,10 @@ aot_eager_graph = aot_autograd(
     fw_compiler=fw_compiler,
     bw_compiler=bw_compiler,
     partition_fn=min_cut_rematerialization_partition,
+)
+
+device_type = (
+    acc.type if (acc := torch.accelerator.current_accelerator(True)) else "cpu"
 )
 
 
@@ -140,7 +193,7 @@ class TestDTensorCompile(torch._dynamo.test_case.TestCase):
 
     @property
     def device_type(self) -> str:
-        return f"{self.device.type}" if self.device is not None else "cpu"
+        return device_type
 
     @property
     def world_size(self) -> int:
@@ -376,6 +429,7 @@ def forward(self, b_parametrizations_buffer_original0, x):
         self.assertEqual(res, ref)
 
     @skipIfHpu
+    @skipXPUIf(True, "https://github.com/intel/torch-xpu-ops/issues/1981")
     def test_dtensor_dynamic_loss_parallel_log_softmax(self):
         mesh = DeviceMesh(self.device_type, torch.arange(self.world_size))
 
@@ -761,6 +815,37 @@ def forward(self, b_parametrizations_buffer_original0, x):
         # If we don't properly contiguify our traced tangents,
         # this fails with an inductor stride assert
         out_dt.to_local().sum().backward()
+
+    def test_dynamo_to_local_grad_placements_sequence(self):
+        placements = PytreeTuple([Shard(0)])
+
+        mesh = DeviceMesh(self.device_type, torch.arange(self.world_size))
+
+        def fn(x):
+            return dt.to_local(grad_placements=placements) + 2
+
+        fn_opt = torch.compile(fn, backend="aot_eager", fullgraph=True)
+        x = torch.ones(4)
+        dt = DTensor.from_local(x, mesh, [Replicate()], run_check=False)
+
+        out_ref = fn(dt)
+        out_test = fn_opt(dt)
+        self.assertEqual(out_ref, out_test)
+
+    def test_dynamo_to_local_grad_placements_sequence_intermediate(self):
+        mesh = DeviceMesh(self.device_type, torch.arange(self.world_size))
+
+        def fn(x):
+            placements = PytreeTuple([Shard(0)])
+            return dt.to_local(grad_placements=placements) + 2
+
+        fn_opt = torch.compile(fn, backend="aot_eager", fullgraph=True)
+        x = torch.ones(4)
+        dt = DTensor.from_local(x, mesh, [Replicate()], run_check=False)
+
+        out_ref = fn(dt)
+        out_test = fn_opt(dt)
+        self.assertEqual(out_ref, out_test)
 
     def test_dynamo_to_local_kwargs(self):
         mesh = DeviceMesh(self.device_type, torch.arange(self.world_size))
