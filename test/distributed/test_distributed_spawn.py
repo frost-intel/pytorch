@@ -5,9 +5,8 @@ import sys
 
 import torch
 import torch.distributed as dist
-os.system('touch ./barrier')
+
 os.environ["BACKEND"] = "xccl"
-os.environ["TEMP_DIR"] = "./"
 os.environ["WORLD_SIZE"] = str(torch.accelerator.device_count())
 
 torch.backends.cuda.matmul.allow_tf32 = False
