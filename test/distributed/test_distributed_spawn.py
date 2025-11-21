@@ -7,7 +7,7 @@ import torch
 import torch.distributed as dist
 os.environ["BACKEND"] = "xccl"
 os.environ["TEMP_DIR"] = "/tmp"
-os.environ["WORLD_SIZE"] = torch.accelerator.device_count()
+os.environ["WORLD_SIZE"] = str(torch.accelerator.device_count())
 
 torch.backends.cuda.matmul.allow_tf32 = False
 
