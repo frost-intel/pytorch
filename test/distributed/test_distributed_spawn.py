@@ -5,6 +5,7 @@ import sys
 
 import torch
 import torch.distributed as dist
+os.system('touch /tmp/barrier')
 os.environ["BACKEND"] = "xccl"
 os.environ["TEMP_DIR"] = "/tmp"
 os.environ["WORLD_SIZE"] = str(torch.accelerator.device_count())
