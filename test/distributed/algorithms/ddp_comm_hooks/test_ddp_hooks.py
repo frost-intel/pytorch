@@ -19,7 +19,7 @@ from torch.distributed.algorithms.ddp_comm_hooks import (
 from torch.nn.parallel import DistributedDataParallel
 from torch.testing._internal.common_distributed import (
     MultiProcessTestCase,
-    requires_nccl,
+    requires_accelerator_dist_backend,
     skip_if_lt_x_gpu,
 )
 from torch.testing._internal.common_utils import run_tests, TEST_WITH_DEV_DBG_ASAN
@@ -33,8 +33,8 @@ device_type = acc.type if (acc := torch.accelerator.current_accelerator()) else 
 backend = dist.get_default_backend_for_device(device_type)
 
 def gpus_for_rank(world_size):
-    visible_devices = list(range(torch.cuda.device_count()))
-    gpus_per_process = torch.cuda.device_count() // world_size
+    visible_devices = list(range(torch.accelerator.device_count()))
+    gpus_per_process = torch.accelerator.device_count() // world_size
     gpus_for_rank = []
     for rank in range(world_size):
         gpus_for_rank.append(
@@ -76,7 +76,7 @@ class DistributedDataParallelCommHookTest(MultiProcessTestCase):
     def _get_process_group_nccl(self):
         store = dist.FileStore(self.file_name, self.world_size)
         dist.init_process_group(
-            backend="nccl",
+            backend=backend,
             world_size=self.world_size,
             rank=self.rank,
             store=store,
@@ -121,7 +121,7 @@ class DistributedDataParallelCommHookTest(MultiProcessTestCase):
         param = next(model.parameters())
         return param.grad
 
-    @requires_nccl()
+    @requires_accelerator_dist_backend(["nccl", "xccl"])
     @skip_if_lt_x_gpu(2)
     def test_ddp_comm_hook_allreduce_hook(self):
         """
@@ -137,7 +137,7 @@ class DistributedDataParallelCommHookTest(MultiProcessTestCase):
 
         torch.testing.assert_close(hook_grads, reference_grads, rtol=1e-5, atol=0)
 
-    @requires_nccl()
+    @requires_accelerator_dist_backend(["nccl", "xccl"])
     @skip_if_lt_x_gpu(2)
     def test_ddp_comm_hook_fp16compress_hook(self):
         """
@@ -153,7 +153,7 @@ class DistributedDataParallelCommHookTest(MultiProcessTestCase):
 
         torch.testing.assert_close(hook_grads, reference_grads, rtol=1e-5, atol=1e-4)
 
-    @requires_nccl()
+    @requires_accelerator_dist_backend(["nccl", "xccl"])
     @skip_if_lt_x_gpu(2)
     def test_ddp_comm_hook_quantize_per_tensor_hook(self):
         """
@@ -169,7 +169,7 @@ class DistributedDataParallelCommHookTest(MultiProcessTestCase):
 
         torch.testing.assert_close(hook_grads, reference_grads, rtol=1e-5, atol=1e-4)
 
-    @requires_nccl()
+    @requires_accelerator_dist_backend(["nccl", "xccl"])
     @skip_if_lt_x_gpu(2)
     def test_ddp_comm_hook_quantize_per_channel_hook(self):
         """
@@ -187,7 +187,7 @@ class DistributedDataParallelCommHookTest(MultiProcessTestCase):
 
         torch.testing.assert_close(hook_grads, reference_grads, rtol=1e-5, atol=1e-4)
 
-    @requires_nccl()
+    @requires_accelerator_dist_backend(["nccl", "xccl"])
     @skip_if_lt_x_gpu(2)
     def test_ddp_comm_hook_noop_hook(self):
         """
@@ -206,7 +206,7 @@ class DistributedDataParallelCommHookTest(MultiProcessTestCase):
 
         torch.testing.assert_close(hook_grads, reference_grads, rtol=1e-5, atol=0)
 
-    @requires_nccl()
+    @requires_accelerator_dist_backend(["nccl", "xccl"])
     @skip_if_lt_x_gpu(2)
     def test_is_last_hook(self):
         process_group = self._get_process_group_nccl()
