@@ -4,6 +4,7 @@ import copy
 import math
 from typing import Any
 
+import torch
 from torch.distributed.flight_recorder.components.builder import build_db
 from torch.distributed.flight_recorder.components.config_manager import JobConfig
 from torch.distributed.flight_recorder.components.types import (
