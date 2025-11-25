@@ -234,7 +234,6 @@ class TestTPFSDPIntegration(FSDPTest):
         return torch.cat(all_grads_per_param).contiguous()
 
     @skip_if_lt_x_gpu(4)
-    @skip_if_not_powerof2_worldsize_xpu()
     def test_fsdp_tp_integration(self):
         self.run_subtests(
             {
