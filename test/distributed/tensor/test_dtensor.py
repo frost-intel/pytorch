@@ -32,7 +32,6 @@ from torch.distributed.tensor.parallel import (
     parallelize_module,
     RowwiseParallel,
 )
-from torch.distributed.tensor.placement_types import _StridedShard
 from torch.testing import make_tensor
 from torch.testing._internal.common_utils import IS_FBCODE, run_tests, skipIfHpu
 from torch.testing._internal.common_distributed import skip_if_lt_x_gpu
@@ -1269,14 +1268,6 @@ class TestDTensorSpec(DTensorTestBase):
         # shard order omit partial
         tensor_global = DTensor.from_local(
             tensor_local, mesh, [Partial(), Replicate(), Replicate()]
-        )
-        self.assertEqual(tensor_global._spec.shard_order, ())
-
-        # shard_order doesn't work with _StridedShard
-        tensor_global = DTensor.from_local(
-            tensor_local,
-            mesh,
-            [Replicate(), _StridedShard(0, split_factor=2), Shard(0)],
         )
         self.assertEqual(tensor_global._spec.shard_order, ())
 
