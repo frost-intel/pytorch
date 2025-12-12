@@ -25,11 +25,10 @@ from torch.distributed._shard.sharding_spec._internals import (
     get_split_size,
     validate_non_overlapping_shards_metadata,
 )
-from torch.testing._internal.common_cuda import TEST_MULTIGPU
 from torch.testing._internal.common_distributed import requires_accelerator_dist_backend, skip_if_lt_x_gpu
 from torch.testing._internal.common_utils import (
     run_tests,
-    skip_but_pass_in_sandcastle_if,
+    skipIfXpu,
     TestCase,
 )
 from torch.testing._internal.distributed._shard.sharded_tensor import (
@@ -65,7 +64,7 @@ class TestShardingSpec(TestCase):
         with self.assertRaisesRegex(RuntimeError, "Invalid device string"):
             DevicePlacementSpec("rank:0/cpu2")
 
-    @skip_if_lt_x_gpu(2)
+    @skipIfXpu
     def test_chunked_sharding_spec(self):
         # Test valid specs.
         ChunkShardingSpec(0, [torch.device(0), torch.device(1)])
