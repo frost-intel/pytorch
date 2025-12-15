@@ -888,6 +888,7 @@ class DistributeWithDeviceOrderTest(DTensorTestBase):
             )
             self.assertEqual(sharded_dt.to_local(), expected_dt.to_local())
 
+    @skip_if_lt_x_gpu(8)
     @with_comms
     def test_force_min_cost_redistribution_plan(self):
         """
