@@ -1598,7 +1598,6 @@ class DistributedTest:
             "Need NCCL 2.7+ for send/recv",
         )
         def test_batch_isend_irecv_mixed_backend_err(self):
-
             self._barrier()
             rank = dist.get_rank()
             init_multigpu_helper(dist.get_world_size(), BACKEND)
