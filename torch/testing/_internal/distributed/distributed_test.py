@@ -3971,7 +3971,7 @@ class DistributedTest:
             )
 
         @skip_but_pass_in_sandcastle_if(
-            BACKEND != "mpi" , "Only MPI supports all_to_all"
+            BACKEND != "mpi", "Only MPI supports all_to_all"
         )
         def test_all_to_all(self):
             group, group_id, rank = self._init_global_test()
