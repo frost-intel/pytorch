@@ -2,12 +2,15 @@
 
 import os
 import sys
+import subprocess
+
 
 import torch
 import torch.distributed as dist
 
-os.environ["BACKEND"] = "xccl"
-os.environ["WORLD_SIZE"] = str(torch.accelerator.device_count())
+# os.environ["BACKEND"] = "xccl"
+# os.environ["WORLD_SIZE"] = str(torch.accelerator.device_count())
+
 
 torch.backends.cuda.matmul.allow_tf32 = False
 
