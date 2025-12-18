@@ -3546,9 +3546,9 @@ class DistributedTest:
             group, group_id, rank = self._init_full_group_test()
             self._test_all_gather_helper(group, group_id, rank)
 
-        # @skip_but_pass_in_sandcastle_if(
-        #     BACKEND != "nccl", "Only Nccl supports all_gather_v"
-        # )
+        @skip_but_pass_in_sandcastle_if(
+            BACKEND != "nccl" and BACKEND!="xccl", "XCCL and NCCL support all_gather_v"
+        )
         @skip_if_no_gpu
         def test_all_gather_v_cuda(self):
             self._barrier()
