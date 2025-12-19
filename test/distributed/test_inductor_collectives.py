@@ -2768,6 +2768,7 @@ class TestSyncDecisionCrossRanks(MultiProcessTestCase):
                 insert_overlap_deps=True,
                 max_memory_increase_ratio=0.0,
                 collective_estimator="benchmark",
+                log_final_collectives_estimations=True,
             )
 
         torch._inductor.config.post_grad_custom_post_pass = _pass
