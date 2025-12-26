@@ -122,6 +122,7 @@ def _nccl_factory(
 
 register_backend("gloo", _gloo_factory)
 register_backend("nccl", _nccl_factory)
+register_backend("xccl", _nccl_factory)
 
 
 def new_group(
