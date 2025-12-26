@@ -232,7 +232,7 @@ class RuntimeEstimator(TorchDispatchMode):
             Tuple[Any, float]: A tuple containing the result of the function and
                 the mean operation time in milliseconds.
         """
-        assert torch.cuda.is_available(), (
+        assert torch.accelerator.is_available(), (
             "Roofline estimation needs to access CUDA capabilities to make estimations"
         )
 
