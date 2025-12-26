@@ -2764,7 +2764,8 @@ def get_device_tflops(dtype: torch.dtype) -> float:
         if torch.backends.cuda.matmul.allow_tf32:
             return get_max_tensorcore_tflops(torch.float32, sm_clock)
         else:
-            return get_max_simd_tflops(torch.float32, sm_clock)
+            # return get_max_simd_tflops(torch.float32, sm_clock)
+            return 0.01
     else:
         if dtype in (torch.float16, torch.bfloat16) and SM80OrLater:
             # pyrefly: ignore [missing-argument]
