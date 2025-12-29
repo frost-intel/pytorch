@@ -256,7 +256,6 @@ class TestFullyShard2DTraining(FSDPTest):
             self.assertEqual(full_param, ref_param)
 
     @skip_if_lt_x_gpu(2)
-    @xfailIf(TEST_XPU)  # https://github.com/pytorch/pytorch/issues/156782
     def test_tp_with_fsdp_offloading(self):
         global_mesh = init_device_mesh(
             device_type, (1, self.world_size), mesh_dim_names=("dp", "tp")
