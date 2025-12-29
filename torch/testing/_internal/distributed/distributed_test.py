@@ -4836,16 +4836,12 @@ class DistributedTest:
 
             # Test a simple linear as well as a ResNet model.
             models_to_test = [
-<<<<<<< HEAD
-                nn.Sequential(nn.Linear(3, 3), nn.Linear(3, 3), nn.Linear(3, 3)).to(device_type)
-=======
-                nn.Sequential(nn.Linear(3, 3), nn.Linear(3, 3), nn.Linear(3, 3)).cuda(),
+                nn.Sequential(nn.Linear(3, 3), nn.Linear(3, 3), nn.Linear(3, 3)).to(device_type),
                 # run model of at least 1M parameters to hit potential race conditions in
                 # stream semantics
                 nn.Sequential(
                     nn.Linear(3, 1024), nn.Linear(1024, 1024), nn.Linear(1024, 3)
-                ).cuda(),
->>>>>>> upstream/main
+                ).to(device_type),
             ]
             if HAS_TORCHVISION:
                 models_to_test.append(torchvision.models.resnet50().to(device_type))
