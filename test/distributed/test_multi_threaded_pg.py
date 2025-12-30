@@ -301,7 +301,6 @@ class TestCollectivesWithBaseClass(MultiThreadedTestCase):
         self.assertEqual(t0, torch.ones(3, 3) * res_num)
         self.assertEqual(t1, torch.ones(3, 3) * (res_num * 2))
 
-    @skipIfXpu
     @skip_if_lt_x_gpu(1)
     def test_bwd_sees_fwd_pg(self):
         fwd_tid = threading.current_thread().ident
