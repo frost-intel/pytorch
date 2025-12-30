@@ -21,7 +21,6 @@ from torch.testing._internal.common_distributed import (
     create_device,
     MultiProcessTestCase,
     requires_gloo,
-    requires_nccl,
     requires_accelerator_dist_backend,
     skip_if_lt_x_gpu,
     with_dist_debug_levels,
@@ -212,7 +211,7 @@ class AbstractProcessGroupWrapperTest(MultiProcessTestCase):
 if not TEST_WITH_DEV_DBG_ASAN:
 
     @requires_gloo()
-    @requires_nccl()
+    @requires_accelerator_dist_backend(["nccl", "xccl"])
     class ProcessGroupNCCLWrapperTest(AbstractProcessGroupWrapperTest):
         def setUp(self):
             super(AbstractProcessGroupWrapperTest, self).setUp()
@@ -237,12 +236,19 @@ if not TEST_WITH_DEV_DBG_ASAN:
             if with_new_group:
                 pg = c10d.new_group(backend=backend, timeout=timedelta(seconds=timeout))
             else:
-                _pg = c10d.ProcessGroupNCCL(
-                    store,
-                    self.rank,
-                    self.world_size,
-                    timeout=timedelta(seconds=timeout),
-                )
+                if device_type == "xpu":
+                    _pg = c10d.ProcessGroupXCCL(
+                        store,
+                        self.rank,
+                        self.world_size,
+                    )
+                else:
+                    _pg = c10d.ProcessGroupNCCL(
+                        store,
+                        self.rank,
+                        self.world_size,
+                        timeout=timedelta(seconds=timeout),
+                    )
                 pg = c10d._create_process_group_wrapper(
                     _pg,
                     "unused",
