@@ -2662,7 +2662,6 @@ class TestSyncDecisionCrossRanks(MultiProcessTestCase):
 
     @skip_if_lt_x_gpu(2)
     @unittest.skipIf(not HAS_GPU, "Inductor+gpu needs triton and recent GPU arch")
-    @unittest.skipIf(not SM80OrLater, "bfloat16")
     def test_schedule_overlap_benchmark(self):
         store = c10d.FileStore(self.file_name, self.world_size)
         torch.cuda.set_device(self.rank)
