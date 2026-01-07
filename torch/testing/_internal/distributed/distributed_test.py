@@ -88,6 +88,7 @@ from torch.testing._internal.common_utils import (
     skip_but_pass_in_sandcastle,
     skip_but_pass_in_sandcastle_if,
     skipIfRocm,
+    skipIfRocmArch,
     TemporaryFileName,
     TEST_XPU,
     TEST_CUDA,
@@ -5539,17 +5540,17 @@ class DistributedTest:
                 self._test_DistributedDataParallel(
                     gpu_subset=gpus,
                     rank=rank,
-                    output_device=torch.device("cuda"),
+                    output_device=torch.device(device_type),
                     gradient_as_bucket_view=use_bucket_view,
                     static_graph=static_graph,
                 )
 
                 # test device_ids
-                gpus_list = [torch.device("cuda:" + str(i)) for i in gpus]
+                gpus_list = [torch.device(device_type+":" + str(i)) for i in gpus]
                 self._test_DistributedDataParallel(
                     gpu_subset=gpus_list,
                     rank=rank,
-                    output_device=torch.device("cuda"),
+                    output_device=torch.device(device_type),
                     gradient_as_bucket_view=use_bucket_view,
                     static_graph=static_graph,
                 )
@@ -5986,18 +5987,18 @@ class DistributedTest:
                 local_bs=local_bs,
                 global_bs=global_bs,
                 offset=bs_offset,
-                output_device=torch.device("cuda"),
+                output_device=torch.device(device_type),
             )
 
             # test device_ids
-            gpus = [torch.device("cuda:" + str(i)) for i in gpus]
+            gpus = [torch.device(device_type + ":" + str(i)) for i in gpus]
             self._test_DistributedDataParallel_SyncBatchNorm(
                 gpu_subset=gpus,
                 rank=rank,
                 local_bs=local_bs,
                 global_bs=global_bs,
                 offset=bs_offset,
-                output_device=torch.device("cuda"),
+                output_device=torch.device(device_type),
             )
 
         @skip_but_pass_in_sandcastle_if(
@@ -6925,7 +6926,8 @@ class DistributedTest:
                     self.assertEqual(expected_grad, param.grad)
                     # Avoid accumulating grads so that it's the same every iteration
                     net.zero_grad()
-                    torch.accelerator.synchronize(device=self.rank)
+
+                    torch.accelerator.synchronize(self.rank)
 
             # If divide_by_initial_world_size=True (default), we always scale grads
             # by the initial world_size.
@@ -6945,7 +6947,7 @@ class DistributedTest:
                     self.assertEqual(expected_grad, param.grad)
                     # Avoid accumulating grad so that it's the same every iteration.
                     net.zero_grad()
-                    torch.accelerator.synchronize(device=self.rank)
+                    torch.accelerator.synchronize(self.rank)
 
         def _test_ddp_profiling(self, profiler_ctx, profiler_ctx2=None):
             """Runs DDP based model training and captures profiles.
@@ -7197,7 +7199,7 @@ class DistributedTest:
                     out = net(inp)
                     loss = out.sum()
                     loss.backward()
-                    torch.accelerator.synchronize(device=self.rank)
+                    torch.accelerator.synchronize(self.rank)
                     ddp_optim.step()
 
             # Validate model state dicts are equal
@@ -7239,7 +7241,7 @@ class DistributedTest:
             # If we throw when earliest rank terminates, we should ensure
             # that we iterate for that minimum number of times.
             num_iters_tensor = torch.tensor(
-                [num_iters], device=torch.cuda.current_device()
+                [num_iters], device=torch.accelerator.current_device_index()
             )
             dist.all_reduce(num_iters_tensor, op=dist.ReduceOp.MIN)
             min_num_iters = num_iters_tensor.item()
@@ -7279,7 +7281,7 @@ class DistributedTest:
                             # Ensure completion of GPU kernels (including allreduce). If the
                             # join API is not properly implemented, then this should hang
                             # since the allreduce will hang.
-                            torch.accelerator.synchronize(device=rank)
+                            torch.accelerator.synchronize(rank)
                         total_iters += 1
             if test_case.throw_on_early_termination:
                 # Ensure we iterated min_num_iters times.
@@ -7289,7 +7291,7 @@ class DistributedTest:
                 self.assertGreaterEqual(total_iters, min_num_iters)
 
             # Ensure completion of all GPU kernels.
-            torch.accelerator.synchronize(device=rank)
+            torch.accelerator.synchronize(rank)
             # When throwing on early rank termination, we do not
             # broadcast model state from an authoritative rank. All models
             # should already be in sync.
@@ -7813,7 +7815,7 @@ class DistributedTest:
 
                 # Synchronize since we run multiple iterations of this test, to
                 # isolate failure hangs.
-                torch.accelerator.synchronize(device=self.rank)
+                torch.accelerator.synchronize(self.rank)
 
         @require_backend_is_available(DistTestCases.backend_feature["gpu"])
         @skip_if_lt_x_gpu(2)
@@ -9453,7 +9455,7 @@ class DistributedTest:
                     device_ids=[self.rank],
                     find_unused_parameters=find_unused,
                 )
-                inp = torch.randn(1, 10, device="cuda")
+                inp = torch.randn(1, 10, device=device_type)
                 for _ in range(6):
                     out = ddp(inp, find_unused=find_unused, dynamic=False)
                     loss = out.sum()
@@ -9466,7 +9468,7 @@ class DistributedTest:
                 device_ids=[self.rank],
                 find_unused_parameters=True,
             )
-            inp = torch.randn(1, 10, device="cuda")
+            inp = torch.randn(1, 10, device=device_type)
             for i in range(6):
                 out = ddp(inp, find_unused=True, dynamic=i % 2 == 0)
                 loss = out.sum()
@@ -10053,7 +10055,7 @@ class DistributedTest:
             model = torch.nn.parallel.DistributedDataParallel(
                 model, device_ids=[self.rank], static_graph=True
             )
-            inp = torch.ones(2, 10, device="cuda")
+            inp = torch.ones(2, 10, device=device_type)
             for _ in range(3):
                 model.zero_grad()
                 local_model.zero_grad()
@@ -10373,7 +10375,7 @@ class DistributedTest:
             with self.assertRaisesRegex(
                 RuntimeError, "Only 1D device mesh is supported,"
             ):
-                device_mesh = init_device_mesh("cuda", (2, world_size // 2))
+                device_mesh = init_device_mesh(device_type, (2, world_size // 2))
                 ddp_model = torch.nn.parallel.DistributedDataParallel(
                     model, device_mesh=device_mesh
                 )
