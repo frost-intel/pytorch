@@ -913,7 +913,7 @@ class TestDataParallelDeviceType(TestCase):
         self.assertEqual(out, expected_out, atol=dtype2prec_DONTUSE[dtype], rtol=0)
 
 
-instantiate_device_type_tests(TestDataParallelDeviceType, globals())
+instantiate_device_type_tests(TestDataParallelDeviceType, globals(),allow_xpu=True)
 
 if __name__ == "__main__":
     TestCase._default_dtype_check_enabled = True
