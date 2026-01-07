@@ -28,7 +28,7 @@ from torch.distributed.elastic.utils.distributed import get_free_port
 from torch.testing._internal.common_utils import (
     run_tests,
     skip_but_pass_in_sandcastle_if,
-    TEST_CUDA,
+    TEST_ACCELERATOR,
     TEST_WITH_DEV_DBG_ASAN,
     TestCase,
 )
@@ -681,7 +681,7 @@ class ElasticLaunchTest(TestCase):
     @skip_but_pass_in_sandcastle_if(
         TEST_WITH_DEV_DBG_ASAN, "test incompatible with dev/dbg asan"
     )
-    @skipIf(not TEST_CUDA, "requires CUDA")
+    @skipIf(not TEST_ACCELERATOR, "requires GPU")
     def test_virtual_local_rank(self):
         """
         Test that virtual-local-rank ensures consistent device IDs across ranks.
