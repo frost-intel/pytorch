@@ -25,7 +25,7 @@ from torch.distributed._tools.fake_collectives import (
     non_functional_collectives,
 )
 from torch.testing._internal.common_cuda import TEST_CUDA
-from torch.testing._internal.common_utils import run_tests, skipIfTorchDynamo, TestCase, TEST_XPU
+from torch.testing._internal.common_utils import run_tests, TestCase, TEST_XPU
 from torch.testing._internal.distributed.fake_pg import FakeStore
 from torch.utils._python_dispatch import TorchDispatchMode
 
@@ -47,7 +47,6 @@ class TestFakeCollectives(TestCase):
         dist.init_process_group("fake", rank=0, world_size=world_size, store=store)
         torch.accelerator.set_device_index(torch.accelerator.current_device_idx())
 
-    @skipIfTorchDynamo("https://github.com/pytorch/pytorch/issues/115653")
     @unittest.skipIf(not TEST_CUDA and not TEST_XPU, "CUDA not available")
     def test_collectives(self):
         try:
