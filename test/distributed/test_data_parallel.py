@@ -12,7 +12,7 @@ import torch.nn.functional as F
 import torch.nn.parallel as dp
 from torch import nn
 from torch.cuda.amp import autocast
-from torch.testing._internal.common_cuda import TEST_CUDA, TEST_MULTIGPU
+from torch.testing._internal.common_cuda import TEST_CUDA
 from torch.testing._internal.common_device_type import (
     dtypes,
     instantiate_device_type_tests,
@@ -27,6 +27,7 @@ from torch.testing._internal.common_utils import (
     skip_but_pass_in_sandcastle_if,
     TestCase,
     TEST_XPU,
+    TEST_MULTIGPU,
 )
 from torch.testing._internal.common_distributed import requires_accelerator_dist_backend
 
@@ -522,17 +523,7 @@ class TestDataParallel(TestCase):
     def test_scatter_gpu(self):
         self._test_scatter(torch.randn((4, 4), dtype=torch.double).to(device_type))
 
-<<<<<<< HEAD
     @requires_accelerator_dist_backend(["nccl", "xccl"])
-    def test_data_parallel_complex(self):
-        # We expect complex parameters to be broadcast by view_as_real, e.g. move from C to R^2
-        class Cplx(torch.nn.Module):
-            def __init__(self) -> None:
-                super().__init__()
-                self.cplx = torch.nn.Parameter(
-                    torch.zeros(1, 10, dtype=torch.cfloat).to(device_type)
-                )
-=======
     @skip_but_pass_in_sandcastle_if(not TEST_MULTIGPU, "multi-GPU not supported")
     def test_data_parallel_complex_parameters(self):
         # test that complex parameters are handled correctly by DataParallel
@@ -541,27 +532,18 @@ class TestDataParallel(TestCase):
                 super().__init__()
                 self.fc1 = torch.nn.Linear(8, 16, dtype=torch.cfloat)
                 self.fc2 = torch.nn.Linear(16, 8, dtype=torch.cfloat)
->>>>>>> upstream/main
 
             def forward(self, x):
                 x = self.fc1(x)
                 x = x * torch.exp(1j * x.real)  # complex nonlinearity
                 return self.fc2(x)
 
-<<<<<<< HEAD
-        cplx = torch.nn.DataParallel(Cplx().to(device_type))
-        input = torch.rand(1, 10, dtype=torch.cfloat).to(device_type)
-        result = cplx(input)
-        # 2 is the extra real view dimension here
-        self.assertEqual(result.size(), torch.Size([1, 10, 2]))
-        self.assertEqual(result, torch.view_as_real(input))
-=======
         torch.manual_seed(42)
-        model_single = ComplexModel().cuda()
+        model_single = ComplexModel().to(device_type)
         opt_single = torch.optim.SGD(model_single.parameters(), lr=0.01)
 
         torch.manual_seed(42)
-        model_dp_base = ComplexModel().cuda()
+        model_dp_base = ComplexModel().to(device_type)
         model_dp = torch.nn.DataParallel(model_dp_base)
         opt_dp = torch.optim.SGD(model_dp_base.parameters(), lr=0.01)
 
@@ -570,7 +552,7 @@ class TestDataParallel(TestCase):
 
         for epoch in range(num_epochs):
             torch.manual_seed(epoch * 100)
-            x = torch.randn(batch_size, 8, dtype=torch.cfloat, device="cuda")
+            x = torch.randn(batch_size, 8, dtype=torch.cfloat, device=device_type)
 
             # tolerance grows with epochs due to accumulated numerical differences
             atol = 1e-5 * (10**epoch)
@@ -615,6 +597,7 @@ class TestDataParallel(TestCase):
                     f"Epoch {epoch}: weights differ for {n1} after optimizer step",
                 )
 
+    @requires_accelerator_dist_backend(["nccl", "xccl"])
     @skip_but_pass_in_sandcastle_if(not TEST_MULTIGPU, "multi-GPU not supported")
     def test_data_parallel_complex_mixed_parameters(self):
         # test that mix complex and real parameters are handled correctly by DataParallel
@@ -635,11 +618,11 @@ class TestDataParallel(TestCase):
                 return r, c
 
         torch.manual_seed(42)
-        model_single = MixedModel().cuda()
+        model_single = MixedModel().to(device_type)
         opt_single = torch.optim.SGD(model_single.parameters(), lr=0.01)
 
         torch.manual_seed(42)
-        model_dp_base = MixedModel().cuda()
+        model_dp_base = MixedModel().to(device_type)
         model_dp = torch.nn.DataParallel(model_dp_base)
         opt_dp = torch.optim.SGD(model_dp_base.parameters(), lr=0.01)
 
@@ -648,8 +631,8 @@ class TestDataParallel(TestCase):
 
         for epoch in range(num_epochs):
             torch.manual_seed(epoch * 100)
-            x_real = torch.randn(batch_size, 8, device="cuda")
-            x_complex = torch.randn(batch_size, 8, dtype=torch.cfloat, device="cuda")
+            x_real = torch.randn(batch_size, 8, device=device_type)
+            x_complex = torch.randn(batch_size, 8, dtype=torch.cfloat, device=device_type)
 
             # tolerance grows with epochs due to accumulated numerical differences
             atol = 1e-5 * (10**epoch)
@@ -691,7 +674,6 @@ class TestDataParallel(TestCase):
                     torch.allclose(p1.data, p2.data, atol=atol),
                     f"Epoch {epoch}: weights differ for {n1} after optimizer step",
                 )
->>>>>>> upstream/main
 
     def _test_gather(self, output_device):
         inputs = (
