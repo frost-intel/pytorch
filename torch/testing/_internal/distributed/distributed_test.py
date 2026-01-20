@@ -4937,7 +4937,6 @@ class DistributedTest:
                         init_before=init_before,
                     )
 
-        @skipIfRocm
         @skip_if_lt_x_gpu(2)
         def test_ddp_apply_optim_in_backward_grad_as_bucket_view_false(self):
             for init_before in [True, False]:
@@ -4948,10 +4947,6 @@ class DistributedTest:
                     gradient_as_bucket_view=False,
                 )
 
-<<<<<<< HEAD
-        @skipIfRocm
-=======
->>>>>>> upstream/main
         @skip_if_lt_x_gpu(2)
         def test_ddp_apply_optim_in_backward_ignored_params(self):
             torch.accelerator.set_device_idx(self.rank)
