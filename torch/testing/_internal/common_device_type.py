@@ -1698,18 +1698,6 @@ def onlyCUDAAndPRIVATEUSE1(fn):
     return only_fn
 
 
-def onlyCUDAAndXPU(fn):
-    @wraps(fn)
-    def only_fn(self, *args, **kwargs):
-        if self.device_type not in ("cuda", "xpu"):
-            reason = f"onlyCUDAAndXPU: doesn't run on {self.device_type}"
-            raise unittest.SkipTest(reason)
-
-        return fn(self, *args, **kwargs)
-
-    return only_fn
-
-
 def disablecuDNN(fn):
     @wraps(fn)
     def disable_cudnn(self, *args, **kwargs):
