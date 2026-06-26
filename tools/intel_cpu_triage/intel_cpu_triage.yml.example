@@ -1,0 +1,53 @@
+# Example scheduled workflow for Phase 1 ingestion + Phase 2 triage.
+#
+# Copy this file into your PRIVATE tracking repo as
+# .github/workflows/intel_cpu_triage.yml. It is intentionally shipped with a
+# .example suffix so it never auto-runs from a pytorch fork.
+#
+# It runs the heuristic triager out of the box. To use an LLM, replace the
+# `triage` step with a small driver script that constructs triage.LLMTriager
+# with your model client.
+
+name: intel-cpu-triage
+
+on:
+  schedule:
+    - cron: "0 7 * * *"  # daily at 07:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Persist the SQLite DB between runs so ingestion stays incremental.
+      - name: Restore triage DB
+        uses: actions/cache@v4
+        with:
+          path: intel_cpu_triage.db
+          key: intel-cpu-triage-db
+
+      - name: Ingest relevant issues (Phase 1)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python -m tools.intel_cpu_triage.cli \
+            --config tools/intel_cpu_triage/config.example.json ingest
+
+      - name: Triage & score (Phase 2)
+        run: |
+          python -m tools.intel_cpu_triage.cli \
+            --config tools/intel_cpu_triage/config.example.json triage
+
+      - name: Report ready-to-work + metrics
+        run: |
+          python -m tools.intel_cpu_triage.cli ready --limit 25
+          python -m tools.intel_cpu_triage.cli metrics
