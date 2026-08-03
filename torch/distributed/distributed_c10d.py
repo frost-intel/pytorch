@@ -403,6 +403,16 @@ try:
 except ImportError:
     _XCCL_AVAILABLE = False
 
+try:
+    # In-tree XCCL backend built on the torchcomms engine (selected via the
+    # "xccl2" backend / entry point). Available whenever XCCL is built.
+    from torch._C._distributed_c10d import ProcessGroupXCCL2
+
+    ProcessGroupXCCL2.__module__ = "torch.distributed.distributed_c10d"
+    __all__ += ["ProcessGroupXCCL2"]
+except ImportError:
+    pass
+
 
 if TYPE_CHECKING:
     from torch._C._distributed_c10d import (  # noqa: TC004
@@ -413,6 +423,7 @@ if TYPE_CHECKING:
         ProcessGroupNCCL2,
         ProcessGroupUCC,
         ProcessGroupXCCL,
+        ProcessGroupXCCL2,
     )
 
 logger = logging.getLogger(__name__)
@@ -794,6 +805,26 @@ def _create_xccl_process_group(
     return backend_class
 
 
+def _create_xccl2_process_group(
+    opts: _DistributedBackendOptions, backend_options: object | None
+) -> C10DBackend:
+    if not is_xccl_available():
+        raise RuntimeError("Distributed package doesn't have XCCL built in")
+    if backend_options is None:
+        pg_options = ProcessGroupXCCL2.Options()
+    elif isinstance(backend_options, ProcessGroupXCCL2.Options):
+        pg_options = backend_options
+    else:
+        raise AssertionError(
+            "Expected backend_options argument to be of type ProcessGroupXCCL2.Options"
+        )
+    pg_options.global_ranks_in_group = opts.global_ranks_in_group
+    pg_options.group_name = opts.group_id
+    # pyrefly: ignore [bad-argument-type]
+    pg_options._timeout = opts.timeout
+    return ProcessGroupXCCL2(opts.store, opts.group_rank, opts.group_size, pg_options)
+
+
 def _register_builtin_mpi_backend() -> None:
     Backend.register_backend(
         Backend.MPI,
@@ -870,12 +901,37 @@ def _register_builtin_ucc_backend() -> None:
 
 
 def _register_builtin_xccl_backend() -> None:
+    creator_fn = (
+        _create_xccl2_process_group
+        if os.environ.get("TORCH_DIST_USE_XCCL2") == "1"
+        else _create_xccl_process_group
+    )
     Backend.register_backend(
         Backend.XCCL,
-        _create_xccl_process_group,
+        creator_fn,
         extended_api=True,
         devices=Backend.backend_capability[Backend.XCCL],
         _backend_type=ProcessGroup.BackendType.XCCL,
+    )
+
+
+def _register_builtin_xccl_legacy_backend() -> None:
+    Backend.register_backend(
+        "xccl-legacy",
+        _create_xccl_process_group,
+        extended_api=True,
+        devices=["xpu"],
+        _backend_type=ProcessGroup.BackendType.CUSTOM,
+    )
+
+
+def _register_builtin_xccl2_backend() -> None:
+    Backend.register_backend(
+        "xccl2",
+        _create_xccl2_process_group,
+        extended_api=True,
+        devices=["xpu"],
+        _backend_type=ProcessGroup.BackendType.CUSTOM,
     )
 
 
