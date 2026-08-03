@@ -125,6 +125,11 @@ class WorkXCCL : public c10d::Work {
   void setOutputs(std::vector<at::Tensor> outputs) {
     outputs_ = std::move(outputs);
   }
+  // A coalesced c10d op issues one work per tensor but must hand back a single
+  // handle; the last work adopts the rest so that they outlive the call.
+  void setChildren(std::vector<c10::intrusive_ptr<WorkXCCL>> children) {
+    children_ = std::move(children);
+  }
 
  protected:
   void recordStart(std::string_view coll_name);
@@ -148,6 +153,7 @@ class WorkXCCL : public c10d::Work {
   std::vector<at::Tensor> inputTensors_;
   at::Tensor inputTensor_;
   std::vector<at::Tensor> outputs_;
+  std::vector<c10::intrusive_ptr<WorkXCCL>> children_;
 
   XcclCommInfo comm_info_;
   std::shared_ptr<XcclEventPool> event_pool_;
@@ -161,6 +167,11 @@ class WorkXCCL : public c10d::Work {
   std::optional<std::chrono::steady_clock::time_point> start_completed_time_;
   std::optional<at::RecordFunction> recordFunction_;
   c10::intrusive_ptr<c10::ivalue::Future> future_;
+
+  // Set by the backend for a synchronous barrier: synchronizeInternal() then
+  // host-blocks the CPU thread (in addition to the stream-ordered wait) to
+  // mirror the stock XPU backend, whose barrier host-blocks. See barrierImpl.
+  bool hostBlocking_{false};
 };
 
 class WorkXCCLQueue {
