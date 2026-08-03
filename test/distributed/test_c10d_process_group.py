@@ -102,8 +102,8 @@ class AbstractProcessGroupTest(C10dBackendTest):
 
     def test_different_group_initialization_order(self):
         self._init_pg()
-        if self.device_type == "cuda":
-            torch.cuda.set_device(0)
+        if self.device_type != "cpu":
+            self.device_module.set_device(0)
         full_group = dist.new_group(list(range(self.world_size)))
         singleton = dist.new_group([0])
         if self.rank == 0:
