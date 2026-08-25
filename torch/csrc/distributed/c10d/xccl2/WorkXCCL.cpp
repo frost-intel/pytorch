@@ -210,6 +210,14 @@ void WorkXCCL::synchronizeInternal() {
       c10::xpu::getCurrentXPUStream(comm_info_.device.index());
   end_event_->block(current_stream);
 
+  // For a synchronous barrier, host-block the CPU thread until prior
+  // current-stream work has completed rather than merely stream-ordering it:
+  // callers use barrier() to flush async device work before proceeding, and a
+  // stream-order-only barrier lets the next collective race that work.
+  if (hostBlocking_) {
+    current_stream.synchronize();
+  }
+
   // Release tensor references. The XPU caching allocator manages stream
   // semantics and will not reclaim memory until the stream operations complete.
   inputTensors_.clear();

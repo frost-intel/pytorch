@@ -420,6 +420,7 @@ void ProcessGroupXCCL::initXcclResources() {
       "XCCL commCount failed");
 
   xccl_api_->setVersionInfo();
+  backend_version_ = std::to_string(xccl_api_->getVersion());
   TC_LOG(INFO, this) << "XCCL Version: " << xccl_api_->getVersion()
                      << " (Major: " << xccl_api_->getMajorVersion()
                      << " Minor: " << xccl_api_->getMinorVersion()
@@ -1670,6 +1671,10 @@ c10::intrusive_ptr<WorkXCCL> ProcessGroupXCCL::barrierImpl(
 
   c10::xpu::XPUStream stream = getOperationStream(async_op);
   auto work = createWork(stream, timeout);
+
+  // A synchronous barrier host-blocks the CPU thread in synchronizeInternal(),
+  // matching the stock XPU backend; async barriers stay stream-ordered.
+  work->hostBlocking_ = !async_op;
 
   work->recordStart("barrier");
 
