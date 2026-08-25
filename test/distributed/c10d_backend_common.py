@@ -8,7 +8,6 @@ from datetime import timedelta
 import torch
 import torch.distributed as dist
 from torch.testing._internal.common_distributed import MultiProcessTestCase
-from torch.testing._internal.common_utils import TEST_CUDA
 
 
 STANDARD_DTYPES = (
@@ -50,6 +49,7 @@ class BackendConfig:
     supports_work_result: bool = False
     supports_gather_single: bool = False
     supports_uneven_all_gather: bool = False
+    detects_nan_in_collectives: bool = True
     dtypes: tuple[torch.dtype, ...] = STANDARD_DTYPES
     float8_dtypes: tuple[torch.dtype, ...] = ()
     premul_sum_dtypes: tuple[torch.dtype, ...] = ()
@@ -116,6 +116,25 @@ C10D_BACKENDS = (
             torch.bfloat16,
         ),
     ),
+    # oneCCL's C API has no float8 types and rejects the bitwise reductions, so
+    # xccl2 leaves both at their defaults. Collectives timing and per-work
+    # sequence numbers are not implemented yet.
+    #
+    # supports_gather_single is off even though ProcessGroupXCCL implements
+    # gather_single: torch-xpu-ops' TORCH_LIBRARY_IMPL(c10d, XPU) does not
+    # register c10d::gather_into_tensor_, so the dispatcher never reaches the
+    # backend. detects_nan_in_collectives is off because torch-xpu-ops'
+    # check_for_nan kernel signals via a device-side assert(0) that is a no-op
+    # on XPU -- the NaN is reported neither as an exception nor as an abort.
+    # Both are gaps outside this backend; flip them when they are filled.
+    BackendConfig(
+        "xccl2",
+        "xpu",
+        supports_coalescing=True,
+        supports_dropped_p2p_work=True,
+        supports_uneven_all_gather=True,
+        detects_nan_in_collectives=False,
+    ),
 )
 
 CUDA_BACKENDS = tuple(
@@ -129,10 +148,15 @@ class C10dBackendTest:
         return 2
 
     @property
+    def device_module(self):
+        return torch.get_device_module(self.device_type)
+
+    @property
     def device(self):
-        if self.device_type == "cuda":
-            return torch.device(self.device_type, self.rank)
-        return torch.device(self.device_type)
+        # Accelerator devices are indexed per rank; a CPU device has no index.
+        if self.device_type == "cpu":
+            return torch.device(self.device_type)
+        return torch.device(self.device_type, self.rank)
 
     def setUp(self):
         super().setUp()
@@ -148,8 +172,8 @@ class C10dBackendTest:
             pass
 
     def _init_pg(self):
-        if self.device_type == "cuda":
-            torch.cuda.set_device(self.rank)
+        if self.device_type != "cpu":
+            self.device_module.set_device(self.rank)
         store = dist.FileStore(self.file_name, self.world_size)
         dist.init_process_group(
             self.backend_name,
@@ -181,6 +205,7 @@ def instantiate_backend_tests(namespace, suite_name, base_class, backends):
                 "supports_work_result": backend.supports_work_result,
                 "supports_gather_single": backend.supports_gather_single,
                 "supports_uneven_all_gather": backend.supports_uneven_all_gather,
+                "detects_nan_in_collectives": backend.detects_nan_in_collectives,
                 "dtypes": backend.dtypes,
                 "float8_dtypes": backend.float8_dtypes,
                 "premul_sum_dtypes": backend.premul_sum_dtypes,
@@ -191,9 +216,10 @@ def instantiate_backend_tests(namespace, suite_name, base_class, backends):
             not dist.is_backend_available(backend.name),
             f"{backend.name} backend is not available",
         )(test_class)
-        if backend.device_type == "cuda":
+        if backend.device_type != "cpu":
+            device_module = torch.get_device_module(backend.device_type)
             test_class = unittest.skipIf(
-                not TEST_CUDA or torch.cuda.device_count() < 2,
-                f"{backend.name} requires 2+ GPUs",
+                not device_module.is_available() or device_module.device_count() < 2,
+                f"{backend.name} requires 2+ {backend.device_type} devices",
             )(test_class)
         namespace[class_name] = test_class

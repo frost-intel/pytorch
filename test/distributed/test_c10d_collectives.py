@@ -290,7 +290,14 @@ class AbstractCollectivesTest(C10dBackendTest):
     def test_gather_single(self):
         self._init_pg()
         if not self.supports_gather_single:
-            with self.assertRaisesRegex(RuntimeError, "does not support gather_single"):
+            # A backend declines either by falling through to Backend's default
+            # implementation, or -- as on XPU, where torch-xpu-ops does not
+            # register c10d::gather_into_tensor_ -- by never being reached at
+            # all, which surfaces as a NotImplementedError (a RuntimeError).
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "does not support gather_single|not currently implemented",
+            ):
                 self._test_gather_single(4, torch.float32, False)
             return
         self._test_transport_matrix(self._test_gather_single)
@@ -631,11 +638,11 @@ class AbstractCollectivesTest(C10dBackendTest):
         # synchronous barrier: once it returns the stream must have drained
         # (stream.query()). Only the synchronous path (async_op=False) host-
         # blocks; an async barrier stays stream-ordered and is not tested here.
-        if self.device_type != "cuda":
-            self.skipTest(f"{self.backend_name} host-block test requires CUDA")
+        if self.device_type == "cpu":
+            self.skipTest(f"{self.backend_name} host-block test needs an accelerator")
         self._init_pg()
-        stream = torch.cuda.current_stream()
-        torch.cuda._sleep(1_000_000_000)
+        stream = self.device_module.current_stream()
+        self.device_module._sleep(1_000_000_000)
         self.assertFalse(
             stream.query(), "precondition: enqueued work should leave stream busy"
         )
