@@ -7,6 +7,32 @@
 
 namespace at::native::mkldnn {
 
+// Ported from ideep::conv_deconv_utils::prepare_parameters (shared with
+// detail/Deconv.cpp).
+// Common logic to prepare parameters for conv/deconv.
+// non-quantization version
+void prepare_parameters(
+    const ideep::tensor& src,
+    const ideep::tensor& weights,
+    const ideep::tensor& bias,
+    const dnnl::memory::dims& dst_dims,
+    const ideep::tensor& dst,
+    const dnnl::memory::dims& dilates,
+    int groups,
+    const ideep::attr_t& attr,
+    bool with_bias,
+    bool is_deconv,
+    ideep::tensor& weight_grouped, /* Output */
+    dnnl::memory::dims& dil_compatible, /* Output */
+    ideep::attr_t& op_attr, /* Output */
+    ideep::attr_t& src_attr, /* Output */
+    ideep::attr_t& weights_attr, /* Output */
+    ideep::attr_t& bias_attr, /* Output */
+    ideep::tensor::desc& src_desc, /* Output */
+    ideep::tensor::desc& weights_desc, /* Output */
+    ideep::tensor::desc& bias_desc, /* Output */
+    ideep::tensor::desc& dst_desc /* Output */);
+
 // Ported from ideep::convolution_forward::compute_v3 (with bias).
 // 2-in-1 Conv computation with bias for fp32
 void convolution_forward_compute_v3(
